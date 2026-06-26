@@ -59,12 +59,30 @@ asyncio.run(main(sys.argv[1:]))
 echo "Step 5: Distributing generated files to target volumes with full permissions..."
 rm -rf /app/dest_startup/* /app/dest_userconfig/* /app/dest_mongo/* /app/dest_seed/* /app/dest_certificates/* 2>/dev/null || true
 
-# 各フォルダの中身を永続ボリュームへ安全にコピー
+# 基本フォルダの中身を永続ボリュームへ安全にコピー
 cp -a /app/target/startup/. /app/dest_startup/
 cp -a /app/target/userconfig/. /app/dest_userconfig/
 cp -a /app/target/mongo/. /app/dest_mongo/
 cp -a /app/target/seed/. /app/dest_seed/
-cp -a /app/target/certificates/. /app/dest_certificates/
+
+# 👇【劇的進化】Shoestringが生成した証明書（cert）の格納場所を自動探索して100%確実に配送します
+if [ -d "/app/target/userconfig/resources/cert" ]; then
+    echo "Found certificates inside userconfig/resources/cert. Copying..."
+    cp -a /app/target/userconfig/resources/cert/. /app/dest_certificates/
+elif [ -d "/app/target/certificates" ]; then
+    echo "Found certificates inside top-level directory. Copying..."
+    cp -a /app/target/certificates/. /app/dest_certificates/
+else
+    echo "Searching for ca.pubkey.pem dynamically..."
+    DETECTED_DIR=$(find /app/target -name "ca.pubkey.pem" -exec dirname {} \; | head -n 1)
+    if [ -n "$DETECTED_DIR" ]; then
+        echo "Dynamically located certificates at $DETECTED_DIR. Copying..."
+        cp -a "$DETECTED_DIR"/. /app/dest_certificates/
+    else
+        echo "ERROR: FAILED TO LOCATE CERTIFICATES"
+        exit 1
+    fi
+fi
 
 # 本番コンテナが読み込めるように権限をフルオープン化
 chmod -R 777 /app/dest_startup /app/dest_userconfig /app/dest_mongo /app/dest_seed /app/dest_certificates || true

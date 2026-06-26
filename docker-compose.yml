@@ -3,11 +3,11 @@ services:
   initializer:
     build: ./initializer
     volumes:
-      - symbol_startup_v7:/app/dest_startup
-      - symbol_userconfig_v7:/app/dest_userconfig
-      - symbol_mongo_v7:/app/dest_mongo
-      - symbol_seed_v7:/app/dest_seed
-      - symbol_certificates_v7:/app/dest_certificates
+      - symbol_startup_v8:/app/dest_startup
+      - symbol_userconfig_v8:/app/dest_userconfig
+      - symbol_mongo_v8:/app/dest_mongo
+      - symbol_seed_v8:/app/dest_seed
+      - symbol_certificates_v8:/app/dest_certificates
     environment:
       - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
       - NODE_NAME=${NODE_NAME:-MyDokployNode}
@@ -24,7 +24,7 @@ services:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongodb_data_v7:/data/db
+      - mongodb_data_v8:/data/db
     restart: always
     networks:
       - dokploy-network
@@ -36,7 +36,7 @@ services:
     depends_on:
       - mongo
     volumes:
-      - symbol_startup_v7:/startup:ro
+      - symbol_startup_v8:/startup:ro
     network_mode: "service:mongo"
     command:
       - /bin/bash
@@ -78,11 +78,11 @@ services:
       - initializer
       - mongo
     volumes:
-      - symbol_startup_v7:/startup:ro
-      - symbol_userconfig_v7:/userconfig:ro
-      - symbol_seed_v7:/seed:ro
-      - symbol_certificates_v7:/certificates:ro
-      - symbol_data_broker_v7:/data
+      - symbol_startup_v8:/startup:ro
+      - symbol_userconfig_v8:/userconfig:ro
+      - symbol_seed_v8:/seed:ro
+      - symbol_certificates_v8:/certificates:ro
+      - symbol_data_broker_v8:/data
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
@@ -97,11 +97,11 @@ services:
       - initializer
       - broker
     volumes:
-      - symbol_startup_v7:/startup:ro
-      - symbol_userconfig_v7:/userconfig:ro
-      - symbol_seed_v7:/seed:ro
-      - symbol_certificates_v7:/certificates:ro
-      - symbol_data_node_v7:/data
+      - symbol_startup_v8:/startup:ro
+      - symbol_userconfig_v8:/userconfig:ro
+      - symbol_seed_v8:/seed:ro
+      - symbol_certificates_v8:/certificates:ro
+      - symbol_data_node_v8:/data
     ports:
       - "7900:7900"
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
@@ -118,8 +118,8 @@ services:
       - node
       - mongo
     volumes:
-      - symbol_startup_v7:/startup:ro
-      - symbol_userconfig_v7:/userconfig:ro
+      - symbol_startup_v8:/startup:ro
+      - symbol_userconfig_v8:/userconfig:ro
     ports:
       - "3000:3000"
     command: /bin/bash /startup/delayrestapi.sh /userconfig
@@ -132,11 +132,11 @@ networks:
     external: true
 
 volumes:
-  symbol_startup_v7:
-  symbol_userconfig_v7:
-  symbol_mongo_v7:
-  symbol_seed_v7:
-  symbol_certificates_v7:
-  symbol_data_broker_v7:
-  symbol_data_node_v7:
-  mongodb_data_v7:
+  symbol_startup_v8:
+  symbol_userconfig_v8:
+  symbol_mongo_v8:
+  symbol_seed_v8:
+  symbol_certificates_v8:
+  symbol_data_broker_v8:
+  symbol_data_node_v8:
+  mongodb_data_v8:

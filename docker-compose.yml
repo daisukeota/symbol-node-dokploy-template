@@ -1,13 +1,13 @@
 services:
-  # 1. 初期化コンテナ
+  # 1. 初期化コンテナ (Shoestringによる設定ファイル自動生成)
   initializer:
     build: ./initializer
     volumes:
-      - symbol_startup_v8:/app/dest_startup
-      - symbol_userconfig_v8:/app/dest_userconfig
-      - symbol_mongo_v8:/app/dest_mongo
-      - symbol_seed_v8:/app/dest_seed
-      - symbol_certificates_v8:/app/dest_certificates
+      - symbol_startup:/app/dest_startup
+      - symbol_userconfig:/app/dest_userconfig
+      - symbol_mongo:/app/dest_mongo
+      - symbol_seed:/app/dest_seed
+      - symbol_certificates:/app/dest_certificates
     environment:
       - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
       - NODE_NAME=${NODE_NAME:-MyDokployNode}
@@ -19,38 +19,35 @@ services:
     networks:
       - dokploy-network
 
-  # 2. MongoDB
+  # 2. データベース (MongoDB 本体)
   mongo:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongodb_data_v8:/data/db
+      - mongodb_data:/data/db
     restart: always
     networks:
       - dokploy-network
 
   # 3. MongoDB レプリカセット初期化タスク
+  # ※ MongoDB本体が完全にオンラインになるのを待ってから、安全にレプリカセット(rs0)を構成します
   mongo-init:
     image: mongo:7.0.23
     user: root
     depends_on:
       - mongo
     volumes:
-      - symbol_startup_v8:/startup:ro
-    network_mode: "service:mongo"
+      - symbol_startup:/startup:ro
+    network_mode: "service:mongo" # mongo本体のネットワークに相乗りして直接コマンドを注入
     command:
       - /bin/bash
       - -ec
       - |
         echo "=== MongoDB ReplicaSet Initialization Task ==="
-        echo "1. Waiting for MongoDB to become responsive..."
         until mongosh --eval "db.runCommand({ping:1})" --quiet > /dev/null 2>&1; do
           echo "Waiting for MongoDB to be fully ready..."
           sleep 2
         done
-        echo "MongoDB is officially responsive!"
-
-        echo "2. Enforcing ReplicaSet Initiation directly via native mongosh..."
         mongosh --eval "
           try {
             var status = rs.status();
@@ -64,11 +61,8 @@ services:
             print('Result: ' + JSON.stringify(res));
           }
         " --quiet
-
-        echo "3. Verifying ReplicaSet Status..."
         sleep 2
         mongosh --eval "rs.status()" --quiet || echo "Warning: Failed to get rs.status()"
-        echo "=== MongoDB ReplicaSet Initialization Task Completed ==="
 
   # 4. Symbol Broker（承認エンジン）
   broker:
@@ -78,18 +72,22 @@ services:
       - initializer
       - mongo
     volumes:
-      - symbol_startup_v8:/startup:ro
-      - symbol_userconfig_v8:/userconfig:ro
-      - symbol_seed_v8:/seed:ro
-      - symbol_certificates_v8:/certificates:ro
-      - symbol_data_broker_v8:/data
+      - symbol_startup:/startup:ro
+      - symbol_userconfig:/userconfig:ro
+      - symbol_seed:/seed:ro
+      - symbol_certificates:/certificates:ro
+      - symbol_data_broker:/data
+    # 💡 処理の解説:
+    # 1. umask 077: 公式推奨の堅牢なファイル権限に制限
+    # 2. mkdir & touch: 公式スクリプトが初回起動時に存在しないファイルを rm しようとしてクラッシュするバグを先回りで防止
+    # 3. rm -f *.lock: 異常終了時に残って再起動を阻害する古いロックファイルを自動パージ
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
       - dokploy-network
 
-  # 5. Symbol ノード本体
+  # 5. Symbol ノード本体 (Peerサーバー)
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
@@ -97,11 +95,11 @@ services:
       - initializer
       - broker
     volumes:
-      - symbol_startup_v8:/startup:ro
-      - symbol_userconfig_v8:/userconfig:ro
-      - symbol_seed_v8:/seed:ro
-      - symbol_certificates_v8:/certificates:ro
-      - symbol_data_node_v8:/data
+      - symbol_startup:/startup:ro
+      - symbol_userconfig:/userconfig:ro
+      - symbol_seed:/seed:ro
+      - symbol_certificates:/certificates:ro
+      - symbol_data_node:/data # ※ ロック競合を防ぐため、brokerとは完全に独立した個別ボリュームを割り当て
     ports:
       - "7900:7900"
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
@@ -110,7 +108,7 @@ services:
     networks:
       - dokploy-network
 
-  # 6. REST ゲートウェイ
+  # 6. REST ゲートウェイ (API 外部公開用)
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
@@ -118,8 +116,8 @@ services:
       - node
       - mongo
     volumes:
-      - symbol_startup_v8:/startup:ro
-      - symbol_userconfig_v8:/userconfig:ro
+      - symbol_startup:/startup:ro
+      - symbol_userconfig:/userconfig:ro
     ports:
       - "3000:3000"
     command: /bin/bash /startup/delayrestapi.sh /userconfig
@@ -132,11 +130,11 @@ networks:
     external: true
 
 volumes:
-  symbol_startup_v8:
-  symbol_userconfig_v8:
-  symbol_mongo_v8:
-  symbol_seed_v8:
-  symbol_certificates_v8:
-  symbol_data_broker_v8:
-  symbol_data_node_v8:
-  mongodb_data_v8:
+  symbol_startup:
+  symbol_userconfig:
+  symbol_mongo:
+  symbol_seed:
+  symbol_certificates:
+  symbol_data_broker:
+  symbol_data_node:
+  mongodb_data:

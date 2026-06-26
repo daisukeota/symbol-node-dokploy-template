@@ -9,25 +9,15 @@ if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
-# 完全にセットアップが完了している場合の判定用マーカー
-DONE_MARKER="/app/target/userconfig/resources/config-node.properties"
-
-if [ -f "$DONE_MARKER" ]; then
-    echo "=== Configuration already exists and is valid. Skipping shoestring setup. ==="
-    exit 0
-fi
-
-# もしセットアップ未完了なのにディレクトリだけが存在する場合は、衝突を避けるため一度削除
-if [ -d "/app/target/userconfig" ]; then
-    echo "Found incomplete userconfig directory. Cleaning up for a fresh setup..."
-    rm -rf /app/target/userconfig
-fi
+# ⚠️ 古いBootstrap等の残骸が残っている可能性があるため、一度ボリューム内を完全に強制大掃除します
+echo "Clearing old volume remnants for a guaranteed fresh Shoestring setup..."
+rm -rf /app/target/* /app/target/.* 2>/dev/null || true
 
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
 
 echo "Step 2: Dynamically injecting node configuration into template..."
-# [node] セクションの直後に、domain と name の設定行を確実に「挿入」します（networkセクションを壊しません）
+# [node] セクションの直後に、domain と name の設定行を確実に挿入
 sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}" /app/shoestring.ini
 
 echo "Step 3: Preparing temporary CA Private Key PEM file..."
@@ -38,7 +28,7 @@ ${MAIN_PRIVATE_KEY}
 EOF
 chmod 600 /app/ca.key.pem
 
-echo "Step 4: Running shoestring setup..."
+echo "Step 4: Running shoestring setup (Fresh Installation)..."
 python3 -m shoestring setup \
   --config /app/shoestring.ini \
   --ca-key-path /app/ca.key.pem \

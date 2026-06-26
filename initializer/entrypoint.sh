@@ -9,26 +9,19 @@ if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
-# 前回のゴミや中途半端な生成物を一度確実にクリーンアップ
 echo "Cleaning up target directory for a fresh initialization..."
 rm -rf /app/target/* /app/target/.* 2>/dev/null || true
 
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
 
-echo "Step 2: Dynamically injecting node configuration via Python configparser..."
-# sedを使わず、Pythonの機能で安全かつ確実に[node]セクションへドメインと名前を注入します
-python3 -c "
-import configparser
-config = configparser.ConfigParser()
-config.read('/app/shoestring.ini')
-if 'node' not in config:
-    config['node'] = {}
-config['node']['domain'] = '${DOMAIN_NAME}'
-config['node']['name'] = '${NODE_NAME:-MyDokployNode}'
-with open('/app/shoestring.ini', 'w') as f:
-    config.write(f)
-"
+echo "Step 2: Injecting configuration lines directly under [node] section..."
+# 元のファイルのレイアウトやコメントを破壊せず、[node]の直後にdomainとnameを2行確実に挿入します
+sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}" /app/shoestring.ini
+
+echo "--- [DEBUG] Verified shoestring.ini Content ---"
+cat /app/shoestring.ini
+echo "-----------------------------------------------"
 
 echo "Step 3: Preparing temporary CA Private Key PEM file..."
 cat << EOF > /app/ca.key.pem
@@ -38,10 +31,6 @@ ${MAIN_PRIVATE_KEY}
 EOF
 chmod 600 /app/ca.key.pem
 
-echo "Step 3.5: Bypassing Shoestring DNS resolution check..."
-# コンテナ内の /etc/hosts にドメインを強制登録し、DNS反映前でも名前解決を成功させます
-echo "127.0.0.1 ${DOMAIN_NAME}" >> /etc/hosts
-
 echo "Step 4: Running shoestring setup..."
 python3 -m shoestring setup \
   --config /app/shoestring.ini \
@@ -49,7 +38,7 @@ python3 -m shoestring setup \
   --directory /app/target \
   --package ${SYMBOL_NETWORK:-mainnet}
 
-# セキュリティのため、使い終わった一時ファイル群は即座に完全消去
+# 使い終わった一時ファイル群は即座に完全消去
 rm -f /app/ca.key.pem /app/shoestring.ini
 
 echo "=== Initialization successfully completed! ==="

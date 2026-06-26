@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. 初期化コンテナ（環境変数から設定ファイルを安全に自動生成）
+  # 1. 初期化コンテナ
   initializer:
     build: ./initializer
     volumes:
@@ -14,6 +14,9 @@ services:
       - VRF_PRIVATE_KEY=${VRF_PRIVATE_KEY}
       - REMOTE_PRIVATE_KEY=${REMOTE_PRIVATE_KEY}
       - VOTING_PRIVATE_KEY=${VOTING_PRIVATE_KEY}
+    # 👇 ここを追加！コンテナ起動時に自動かつ確実にDNSのダミーレコードを注入します
+    extra_hosts:
+      - "${DOMAIN_NAME}:127.0.0.1"
 
   # 2. Symbol ノード本体（ピア＆APIコア）
   node:
@@ -21,7 +24,7 @@ services:
     command: /bin/bash -c "exec /usr/bin/catapult.server /userconfig"
     depends_on:
       initializer:
-        condition: service_completed_successfully # 初期化が完全に終わったら起動
+        condition: service_completed_successfully
     volumes:
       - symbol_config:/userconfig:ro
       - symbol_data:/data
@@ -41,7 +44,7 @@ services:
       - "3000:3000"
     restart: always
 
-  # 4. MongoDB（APIのデータストア）
+  # 4. MongoDB
   db:
     image: mongo:4.4.3
     volumes:
@@ -49,6 +52,6 @@ services:
     restart: always
 
 volumes:
-  symbol_config: # 初期化された設定が格納されるボリューム
-  symbol_data:   # ブロックチェーンの生データが格納されるボリューム
-  mongodb_data: # APIのインデックスデータが格納されるボリューム
+  symbol_config:
+  symbol_data:
+  mongodb_data:

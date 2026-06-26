@@ -16,7 +16,6 @@ echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
 
 echo "Step 2: Injecting configuration lines directly under [node] section..."
-# 元のファイルのレイアウトやコメントを破壊せず、[node]の直後にdomainとnameを2行確実に挿入します
 sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}" /app/shoestring.ini
 
 echo "--- [DEBUG] Verified shoestring.ini Content ---"
@@ -30,6 +29,10 @@ ${MAIN_PRIVATE_KEY}
 -----END PRIVATE KEY-----
 EOF
 chmod 600 /app/ca.key.pem
+
+echo "Step 3.5: Bypassing Shoestring DNS resolution check..."
+# コンテナ内の /etc/hosts にドメインを強制登録し、DNS反映前でも名前解決を成功させます
+echo "127.0.0.1 ${DOMAIN_NAME}" >> /etc/hosts
 
 echo "Step 4: Running shoestring setup..."
 python3 -m shoestring setup \

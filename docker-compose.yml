@@ -5,9 +5,10 @@ services:
   initializer:
     build: ./initializer
     volumes:
-      - symbol_startup_v3:/app/dest_startup       # 👈 _v3 に更新
-      - symbol_userconfig_v3:/app/dest_userconfig # 👈 _v3 に更新
-      - symbol_mongo_v3:/app/dest_mongo           # 👈 _v3 に更新
+      - symbol_startup_v4:/app/dest_startup
+      - symbol_userconfig_v4:/app/dest_userconfig
+      - symbol_mongo_v4:/app/dest_mongo
+      - symbol_seed_v4:/app/dest_seed # 👈 追加
     environment:
       - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
       - NODE_NAME=${NODE_NAME:-MyDokployNode}
@@ -24,7 +25,7 @@ services:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongodb_data_v3:/data/db # 👈 _v3 に更新
+      - mongodb_data_v4:/data/db
     restart: always
     networks:
       - dokploy-network
@@ -33,29 +34,31 @@ services:
   mongo-init:
     image: mongo:7.0.23
     user: root
-    entrypoint: ["/bin/bash", "-c"] # 👈 配列形式でイメージの挙動を完全抹殺
+    entrypoint: ["/bin/bash", "-c"]
     depends_on:
       - db
     volumes:
-      - symbol_startup_v3:/startup:ro # 👈 _v3 に更新
+      - symbol_startup_v4:/startup:ro
     command: "/bin/bash /startup/mongors.sh"
     networks:
       - dokploy-network
 
-  # 4. Symbol Broker
+  # 4. Symbol Broker（承認エンジン）
   broker:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
-    entrypoint: ["/bin/bash", "-c"] # 👈 配列形式でイメージの挙動を完全抹殺
+    entrypoint: ["/bin/bash", "-c"]
     depends_on:
       - initializer
       - db
     volumes:
-      - symbol_startup_v3:/startup:ro       # 👈 _v3 に更新
-      - symbol_userconfig_v3:/userconfig:ro # 👈 _v3 に更新
-      - symbol_data_v3:/data                # 👈 _v3 に更新
+      - symbol_startup_v4:/startup:ro
+      - symbol_userconfig_v4:/userconfig:ro
+      - symbol_seed_v4:/seed:ro # 👈 追加
+      - symbol_data_v4:/data
     command: "/bin/bash /startup/startBroker.sh /userconfig"
     restart: always
+    stop_signal: SIGINT
     networks:
       - dokploy-network
 
@@ -63,18 +66,20 @@ services:
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
-    entrypoint: ["/bin/bash", "-c"] # 👈 配列形式でイメージの挙動を完全抹殺
+    entrypoint: ["/bin/bash", "-c"]
     depends_on:
       - initializer
       - broker
     volumes:
-      - symbol_startup_v3:/startup:ro       # 👈 _v3 に更新
-      - symbol_userconfig_v3:/userconfig:ro # 👈 _v3 に更新
-      - symbol_data_v3:/data                # 👈 _v3 に更新
+      - symbol_startup_v4:/startup:ro
+      - symbol_userconfig_v4:/userconfig:ro
+      - symbol_seed_v4:/seed:ro # 👈 追加
+      - symbol_data_v4:/data
     ports:
       - "7900:7900"
     command: "/bin/bash /startup/startServer.sh /userconfig"
     restart: always
+    stop_signal: SIGINT
     networks:
       - dokploy-network
 
@@ -82,13 +87,13 @@ services:
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
-    entrypoint: ["/bin/bash", "-c"] # 👈 配列形式でイメージの挙動を完全抹殺
+    entrypoint: ["/bin/bash", "-c"]
     depends_on:
       - node
       - db
     volumes:
-      - symbol_startup_v3:/startup:ro       # 👈 _v3 に更新
-      - symbol_userconfig_v3:/userconfig:ro # 👈 _v3 に更新
+      - symbol_startup_v4:/startup:ro
+      - symbol_userconfig_v4:/userconfig:ro
     ports:
       - "3000:3000"
     command: "/bin/bash /startup/delayrestapi.sh /userconfig"
@@ -100,10 +105,10 @@ networks:
   dokploy-network:
     external: true
 
-# すべて末尾を _v3 にリフレッシュ
 volumes:
-  symbol_startup_v3:
-  symbol_userconfig_v3:
-  symbol_mongo_v3:
-  symbol_data_v3:
-  mongodb_data_v3:
+  symbol_startup_v4:
+  symbol_userconfig_v4:
+  symbol_mongo_v4:
+  symbol_seed_v4:
+  symbol_data_v4:
+  mongodb_data_v4:

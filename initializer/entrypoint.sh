@@ -21,10 +21,6 @@ sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}
 sed -i "s|^caCommonName =.*|caCommonName = CA - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
 sed -i "s|^nodeCommonName =.*|nodeCommonName = Node - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
 
-echo "--- [DEBUG] Verified shoestring.ini Content ---"
-cat /app/shoestring.ini
-echo "-----------------------------------------------"
-
 echo "Step 3: Preparing temporary CA Private Key PEM file from HEX string..."
 python3 -c "
 import base64
@@ -61,17 +57,16 @@ asyncio.run(main(sys.argv[1:]))
   --package ${SYMBOL_NETWORK:-mainnet}
 
 echo "Step 5: Distributing generated files to target volumes with full permissions..."
-# 👇 送り先に dest_certificates を追加してクリーンアップ
 rm -rf /app/dest_startup/* /app/dest_userconfig/* /app/dest_mongo/* /app/dest_seed/* /app/dest_certificates/* 2>/dev/null || true
 
-# 各ディレクトリの中身（隠しファイル含む）をそれぞれの永続ボリュームへ安全にコピー
+# 各フォルダの中身を永続ボリュームへ安全にコピー
 cp -a /app/target/startup/. /app/dest_startup/
 cp -a /app/target/userconfig/. /app/dest_userconfig/
 cp -a /app/target/mongo/. /app/dest_mongo/
 cp -a /app/target/seed/. /app/dest_seed/
-cp -a /app/target/certificates/. /app/dest_certificates/  # 👈 【ここを追加！】置き去りだった証明書を配送
+cp -a /app/target/certificates/. /app/dest_certificates/
 
-# 本番コンテナが誰でも実行・読込できるように権限をフルオープン化
+# 本番コンテナが読み込めるように権限をフルオープン化
 chmod -R 777 /app/dest_startup /app/dest_userconfig /app/dest_mongo /app/dest_seed /app/dest_certificates || true
 
 # 使い終わった一時ファイル群は即座に完全消去

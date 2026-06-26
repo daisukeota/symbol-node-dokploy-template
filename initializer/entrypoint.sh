@@ -9,13 +9,10 @@ if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
-# 完全にセットアップが完了している場合の判定用マーカー
-DONE_MARKER="/app/target/userconfig/resources/config-node.properties"
-
-if [ -f "$DONE_MARKER" ]; then
-    echo "=== Configuration already exists and is valid. Skipping shoestring setup. ==="
-    exit 0
-fi
+# ⚠️ 前回のDNSエラー時の中途半端な残骸を一度確実に大掃除します。
+# これにより、DNSチェック回避を仕込んだ本番のセットアップを強制的に完走させます。
+echo "Clearing incomplete setup remnants to ensure DNS-bypass setup runs..."
+rm -rf /app/target/* /app/target/.* 2>/dev/null || true
 
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
@@ -33,7 +30,7 @@ EOF
 chmod 600 /app/ca.key.pem
 
 echo "Step 3.5: Bypassing Shoestring DNS resolution check..."
-# 【ここが重要！】コンテナ内の /etc/hosts にドメインを強制登録し、DNS反映前でも名前解決を成功させます
+# コンテナ内の /etc/hosts にドメインを強制登録し、DNS反映前でも名前解決を成功させます
 echo "127.0.0.1 ${DOMAIN_NAME}" >> /etc/hosts
 
 echo "Step 4: Running shoestring setup..."

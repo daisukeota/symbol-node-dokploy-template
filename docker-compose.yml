@@ -32,14 +32,24 @@ services:
   mongo-init:
     image: mongo:7.0.23
     user: root
-    entrypoint: ["/bin/bash", "-c"]
     depends_on:
       - mongo
     volumes:
       - symbol_startup_v6:/startup:ro
     network_mode: "service:mongo"
-    # 👇【ここを劇的に強化！】MongoDBが応答を返すまで1秒ごとにループ待機し、確実にレプリカセットを初期化します
-    command: "until mongosh --eval 'db.runCommand({ping:1})' --quiet > /dev/null 2>&1; do echo 'Waiting for MongoDB to be ready...'; sleep 1; done; /bin/bash /startup/mongors.sh"
+    # 👇【ここを劇的に強化！】トリッキーな entrypoint を廃止し、配列とヒアドキュメントで確実にbashを点火します
+    command:
+      - /bin/bash
+      - -c
+      - |
+        echo "Starting MongoDB readiness check loop..."
+        until mongosh --eval "db.runCommand({ping:1})" --quiet > /dev/null 2>&1; do
+          echo "Waiting for MongoDB to be fully ready..."
+          sleep 2
+        done
+        echo "MongoDB is officially UP! Executing replication setup script..."
+        /bin/bash /startup/mongors.sh
+        echo "MongoDB ReplicaSet initialization successfully completed."
 
   # 4. Symbol Broker（承認エンジン）
   broker:
@@ -103,7 +113,6 @@ networks:
   dokploy-network:
     external: true
 
-# すべての定義を完璧に _v6 で統一
 volumes:
   symbol_startup_v6:
   symbol_userconfig_v6:

@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. 初期化コンテナ
+  # 1. 初期化コンテナ（すでに作成完了済み）
   initializer:
     build: ./initializer
     volumes:
@@ -33,6 +33,7 @@ services:
   mongo-init:
     image: mongo:7.0.23
     user: root
+    entrypoint: "" # 👇 イメージ固有の挙動を完全にシャットアウト
     depends_on:
       - db
     volumes:
@@ -41,10 +42,11 @@ services:
     networks:
       - dokploy-network
 
-  # 4. Symbol Broker
+  # 4. Symbol Broker（承認エンジン）
   broker:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
+    entrypoint: "" # 👇 イメージ固有の挙動を完全にシャットアウト
     depends_on:
       - initializer
       - db
@@ -61,6 +63,7 @@ services:
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
+    entrypoint: "" # 👇 イメージ固有の挙動を完全にシャットアウト
     depends_on:
       - initializer
       - broker
@@ -79,6 +82,7 @@ services:
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
+    entrypoint: "" # 👇 念のためこちらも固定化
     depends_on:
       - node
       - db
@@ -96,7 +100,6 @@ networks:
   dokploy-network:
     external: true
 
-# 用途別に分割定義されたクリーンな新ボリューム群
 volumes:
   symbol_startup_v2:
   symbol_userconfig_v2:

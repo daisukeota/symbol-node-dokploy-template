@@ -1,40 +1,17 @@
 #!/bin/bash
 set -e
 
-echo "=== Symbol Node Initialization via Shoestring ==="
+echo "=== Symbol Node Shoestring CLI Investigator ==="
 
-# 必須の環境変数チェック
-if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
-    echo "ERROR: MAIN_PRIVATE_KEY and DOMAIN_NAME must be provided via environment variables."
-    exit 1
-fi
+echo "Checking top-level shoestring options..."
+echo "----------------------------------------"
+python3 -m shoestring --help || true
+echo "----------------------------------------"
 
-# すでに設定ファイルが存在する場合は再生成をスキップ（2回目以降の通常起動時）
-if [ -f "/app/target/resources/config-node.properties" ]; then
-    echo "Configuration already exists. Skipping shoestring setup."
-    exit 0
-fi
+echo "Checking 'setup' sub-command options (if applicable)..."
+echo "----------------------------------------"
+python3 -m shoestring setup --help || true
+echo "----------------------------------------"
 
-echo "Dynamically generating shoestring.ini from environment variables..."
-
-# 環境変数からshoestring用の自動生成用インプットを作成
-cat << EOF > /app/shoestring.ini
-[network]
-type = ${SYMBOL_NETWORK}
-
-[node]
-name = ${NODE_NAME}
-domain = ${DOMAIN_NAME}
-
-[keys]
-main = ${MAIN_PRIVATE_KEY}
-vrf = ${VRF_PRIVATE_KEY}
-remote = ${REMOTE_PRIVATE_KEY}
-voting = ${VOTING_PRIVATE_KEY}
-EOF
-
-echo "Running shoestring to generate node configurations..."
-# 【修正箇所】python3 -m shoestring を使用して確実にモジュールを呼び出します
-python3 -m shoestring setup --config /app/shoestring.ini --output /app/target
-
-echo "Initialization successfully completed!"
+# ログを確実に画面に残すため、ここで安全に終了します
+exit 0

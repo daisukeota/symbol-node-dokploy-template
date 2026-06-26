@@ -1,7 +1,8 @@
 FROM python:3.10-slim
 
-# 必要なミドルウェアのインストール
+# 必要なミドルウェアのインストール（C拡張コンパイル用の build-essential を追加）
 RUN apt-get update && apt-get install -y \
+    build-essential \
     libssl-dev \
     gettext \
     curl \

@@ -28,7 +28,7 @@ services:
     networks:
       - dokploy-network
 
-  # 3. MongoDB レプリカセット初期化タスク
+  # 3. MongoDB レプリカセット初期化タスク (大成功したためそのまま維持)
   mongo-init:
     image: mongo:7.0.23
     user: root
@@ -39,7 +39,7 @@ services:
     network_mode: "service:mongo"
     command:
       - /bin/bash
-      - -ec         # 👈 【修正】オプションのパースエラーを修正しました
+      - -ec
       - |
         echo "=== MongoDB ReplicaSet Initialization Task ==="
         echo "1. Waiting for MongoDB to become responsive..."
@@ -73,7 +73,7 @@ services:
   broker:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
-    entrypoint: ["/bin/bash", "-c"]
+    # 👇 entrypoint を削除し、純粋なコマンド駆動に戻しました
     depends_on:
       - initializer
       - mongo
@@ -82,7 +82,7 @@ services:
       - symbol_userconfig_v6:/userconfig:ro
       - symbol_seed_v6:/seed:ro
       - symbol_data_v6:/data
-    command: "/bin/bash /startup/startBroker.sh /userconfig"
+    command: /bin/bash /startup/startBroker.sh /userconfig
     restart: always
     stop_signal: SIGINT
     networks:
@@ -92,7 +92,7 @@ services:
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
-    entrypoint: ["/bin/bash", "-c"]
+    # 👇 entrypoint を削除し、純粋なコマンド駆動に戻しました
     depends_on:
       - initializer
       - broker
@@ -103,7 +103,7 @@ services:
       - symbol_data_v6:/data
     ports:
       - "7900:7900"
-    command: "/bin/bash /startup/startServer.sh /userconfig"
+    command: /bin/bash /startup/startServer.sh /userconfig
     restart: always
     stop_signal: SIGINT
     networks:
@@ -113,7 +113,7 @@ services:
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
-    entrypoint: ["/bin/bash", "-c"]
+    # 👇 entrypoint を削除し、純粋なコマンド駆動に戻しました
     depends_on:
       - node
       - mongo
@@ -122,7 +122,7 @@ services:
       - symbol_userconfig_v6:/userconfig:ro
     ports:
       - "3000:3000"
-    command: "/bin/bash /startup/delayrestapi.sh /userconfig"
+    command: /bin/bash /startup/delayrestapi.sh /userconfig
     restart: always
     networks:
       - dokploy-network

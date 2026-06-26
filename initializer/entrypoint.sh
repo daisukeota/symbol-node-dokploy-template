@@ -33,8 +33,8 @@ remote = ${REMOTE_PRIVATE_KEY}
 voting = ${VOTING_PRIVATE_KEY}
 EOF
 
-echo "Running symbol-shoestring to generate node configurations..."
-# 成果物を共有ボリュームである /app/target に一気に出力
-symbol-shoestring setup --config /app/shoestring.ini --output /app/target
+echo "Running shoestring to generate node configurations..."
+# 【修正箇所】python3 -m shoestring を使用して確実にモジュールを呼び出します
+python3 -m shoestring setup --config /app/shoestring.ini --output /app/target
 
 echo "Initialization successfully completed!"

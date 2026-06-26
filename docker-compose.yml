@@ -28,7 +28,7 @@ services:
     networks:
       - dokploy-network
 
-  # 3. MongoDB レプリカセット初期化タスク
+# 3. MongoDB レプリカセット初期化タスク（★ここを完全に書き換えます）
   mongo-init:
     image: mongo:7.0.23
     user: root
@@ -37,19 +37,38 @@ services:
     volumes:
       - symbol_startup_v6:/startup:ro
     network_mode: "service:mongo"
-    # 👇【ここを劇的に強化！】トリッキーな entrypoint を廃止し、配列とヒアドキュメントで確実にbashを点火します
     command:
       - /bin/bash
-      - -c
+      - -e -c        # 👈 -e を追加。途中でエラーがあれば即座に検知させます
       - |
-        echo "Starting MongoDB readiness check loop..."
+        echo "=== MongoDB ReplicaSet Initialization Task ==="
+        echo "1. Waiting for MongoDB to become responsive..."
         until mongosh --eval "db.runCommand({ping:1})" --quiet > /dev/null 2>&1; do
           echo "Waiting for MongoDB to be fully ready..."
           sleep 2
         done
-        echo "MongoDB is officially UP! Executing replication setup script..."
-        /bin/bash /startup/mongors.sh
-        echo "MongoDB ReplicaSet initialization successfully completed."
+        echo "MongoDB is officially responsive!"
+
+        echo "2. Enforcing ReplicaSet Initiation directly via native mongosh..."
+        # 外部の本番コンテナ（node等）がネットワーク越しに解決できるよう、ホスト名 'mongo' を明示して強制結合します
+        mongosh --eval "
+          try {
+            var status = rs.status();
+            print('ReplicaSet already initiated: ' + status.set);
+          } catch (e) {
+            print('Initiating ReplicaSet with host: mongo...');
+            var res = rs.initiate({
+              _id: 'rs0',
+              members: [{ _id: 0, host: 'mongo:27017' }]
+            });
+            print('Result: ' + JSON.stringify(res));
+          }
+        " --quiet
+
+        echo "3. Verifying ReplicaSet Status..."
+        sleep 2
+        mongosh --eval "rs.status()" --quiet || echo "Warning: Failed to get rs.status()"
+        echo "=== MongoDB ReplicaSet Initialization Task Completed ==="
 
   # 4. Symbol Broker（承認エンジン）
   broker:

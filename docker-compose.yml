@@ -14,11 +14,12 @@ services:
       - VRF_PRIVATE_KEY=${VRF_PRIVATE_KEY}
       - REMOTE_PRIVATE_KEY=${REMOTE_PRIVATE_KEY}
       - VOTING_PRIVATE_KEY=${VOTING_PRIVATE_KEY}
-    # 👇 ここを追加！コンテナ起動時に自動かつ確実にDNSのダミーレコードを注入します
-    extra_hosts:
-      - "${DOMAIN_NAME}:127.0.0.1"
+    # 👇 ここを追加！Docker内蔵DNSをバイパスし、直接外の本物DNSにドメインを引かせます
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
-  # 2. Symbol ノード本体（ピア＆APIコア）
+  # 2. Symbol ノード本体
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.6
     command: /bin/bash -c "exec /usr/bin/catapult.server /userconfig"
@@ -32,7 +33,7 @@ services:
       - "7900:7900"
     restart: always
 
-  # 3. REST ゲートウェイ（API接続用）
+  # 3. REST ゲートウェイ
   rest-gateway:
     image: symbolplatform/symbol-rest:2.4.2
     depends_on:

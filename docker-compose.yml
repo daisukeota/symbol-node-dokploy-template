@@ -5,10 +5,10 @@ services:
   initializer:
     build: ./initializer
     volumes:
-      - symbol_startup_v4:/app/dest_startup
-      - symbol_userconfig_v4:/app/dest_userconfig
-      - symbol_mongo_v4:/app/dest_mongo
-      - symbol_seed_v4:/app/dest_seed # 👈 追加
+      - symbol_startup_v5:/app/dest_startup
+      - symbol_userconfig_v5:/app/dest_userconfig
+      - symbol_mongo_v5:/app/dest_mongo
+      - symbol_seed_v5:/app/dest_seed
     environment:
       - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
       - NODE_NAME=${NODE_NAME:-MyDokployNode}
@@ -20,12 +20,12 @@ services:
     networks:
       - dokploy-network
 
-  # 2. MongoDB
-  db:
+  # 2. MongoDB (★サービス名を db から mongo に統一)
+  mongo:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongodb_data_v4:/data/db
+      - mongodb_data_v5:/data/db
     restart: always
     networks:
       - dokploy-network
@@ -36,12 +36,12 @@ services:
     user: root
     entrypoint: ["/bin/bash", "-c"]
     depends_on:
-      - db
+      - mongo
     volumes:
-      - symbol_startup_v4:/startup:ro
+      - symbol_startup_v5:/startup:ro
+    # 👇【ここが特効薬】mongoコンテナのlocalhost環境に直接相乗りさせます
+    network_mode: "service:mongo"
     command: "/bin/bash /startup/mongors.sh"
-    networks:
-      - dokploy-network
 
   # 4. Symbol Broker（承認エンジン）
   broker:
@@ -50,12 +50,12 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     depends_on:
       - initializer
-      - db
+      - mongo
     volumes:
-      - symbol_startup_v4:/startup:ro
-      - symbol_userconfig_v4:/userconfig:ro
-      - symbol_seed_v4:/seed:ro # 👈 追加
-      - symbol_data_v4:/data
+      - symbol_startup_v5:/startup:ro
+      - symbol_userconfig_v5:/userconfig:ro
+      - symbol_seed_v5:/seed:ro
+      - symbol_data_v5:/data
     command: "/bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
@@ -71,10 +71,10 @@ services:
       - initializer
       - broker
     volumes:
-      - symbol_startup_v4:/startup:ro
-      - symbol_userconfig_v4:/userconfig:ro
-      - symbol_seed_v4:/seed:ro # 👈 追加
-      - symbol_data_v4:/data
+      - symbol_startup_v5:/startup:ro
+      - symbol_userconfig_v5:/userconfig:ro
+      - symbol_seed_v5:/seed:ro
+      - symbol_data_v5:/data
     ports:
       - "7900:7900"
     command: "/bin/bash /startup/startServer.sh /userconfig"
@@ -90,10 +90,10 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     depends_on:
       - node
-      - db
+      - mongo
     volumes:
-      - symbol_startup_v4:/startup:ro
-      - symbol_userconfig_v4:/userconfig:ro
+      - symbol_startup_v5:/startup:ro
+      - symbol_userconfig_v5:/userconfig:ro
     ports:
       - "3000:3000"
     command: "/bin/bash /startup/delayrestapi.sh /userconfig"
@@ -106,9 +106,8 @@ networks:
     external: true
 
 volumes:
-  symbol_startup_v4:
-  symbol_userconfig_v4:
-  symbol_mongo_v4:
-  symbol_seed_v4:
-  symbol_data_v4:
-  mongodb_data_v4:
+  symbol_startup_v5:
+  symbol_userconfig_v5:
+  symbol_mongo_v5:
+  symbol_data_v5:
+  mongodb_data_v5:

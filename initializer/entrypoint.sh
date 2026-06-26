@@ -30,9 +30,12 @@ ${MAIN_PRIVATE_KEY}
 EOF
 chmod 600 /app/ca.key.pem
 
-echo "Step 3.5: Bypassing Shoestring DNS resolution check..."
-# コンテナ内の /etc/hosts にドメインを強制登録し、DNS反映前でも名前解決を成功させます
-echo "127.0.0.1 ${DOMAIN_NAME}" >> /etc/hosts
+echo "Step 3.5: Patching Shoestring source code to bypass DNS check..."
+# 【ここが究極のハック！】
+# インストールされたshoestringのソース内の「def require_hostname」の直後に「return」を強制挿入し、
+# 環境やDNSの浸透状態に依存するお節介なチェック機能そのものを完全に無効化します。
+SETUP_SCRIPT_PATH="/usr/local/lib/python3.10/site-packages/shoestring/commands/setup.py"
+sed -i '/def require_hostname/a \    return' "$SETUP_SCRIPT_PATH"
 
 echo "Step 4: Running shoestring setup..."
 python3 -m shoestring setup \

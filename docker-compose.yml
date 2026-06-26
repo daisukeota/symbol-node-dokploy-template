@@ -58,7 +58,7 @@ services:
             print('Initiating ReplicaSet with host: mongo...');
             var res = rs.initiate({
               _id: 'rs0',
-              members: [{ _id: 0, host: 'mongo:27017' }]
+              members: [{ _id: member, host: 'mongo:27017' }]
             });
             print('Result: ' + JSON.stringify(res));
           }
@@ -80,8 +80,9 @@ services:
       - symbol_startup_v6:/startup:ro
       - symbol_userconfig_v6:/userconfig:ro
       - symbol_seed_v6:/seed:ro
-      - symbol_data_broker_v6:/data    # 👈 【変更】専用のボリュームを割り当て
-    command: /bin/bash -c "mkdir -p /data/startup && touch /data/startup/datadir-initialized && exec /bin/bash /startup/startBroker.sh /userconfig"
+      - symbol_data_broker_v6:/data
+    # 👇【修正】execする前に、rm -f /data/*.lock を滑り込ませて残骸を強制パージします
+    command: /bin/bash -c "mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
@@ -98,10 +99,11 @@ services:
       - symbol_startup_v6:/startup:ro
       - symbol_userconfig_v6:/userconfig:ro
       - symbol_seed_v6:/seed:ro
-      - symbol_data_node_v6:/data      # 👈 【変更】専用のボリュームを割り当て
+      - symbol_data_node_v6:/data
     ports:
       - "7900:7900"
-    command: /bin/bash -c "mkdir -p /data/startup && touch /data/startup/mongo-initialized && exec /bin/bash /startup/startServer.sh /userconfig"
+    # 👇【修正】execする前に、rm -f /data/*.lock を滑り込ませて残骸を強制パージします
+    command: /bin/bash -c "mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
@@ -128,12 +130,11 @@ networks:
   dokploy-network:
     external: true
 
-# 👇 【変更】最下部のボリューム定義も、新しく分割した2つに書き換えます
 volumes:
   symbol_startup_v6:
   symbol_userconfig_v6:
   symbol_mongo_v6:
   symbol_seed_v6:
-  symbol_data_broker_v6: # 👈 追加
-  symbol_data_node_v6:   # 👈 追加
+  symbol_data_broker_v6:
+  symbol_data_node_v6:
   mongodb_data_v6:

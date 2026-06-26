@@ -9,9 +9,13 @@ if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
-# ⚠️ 古いBootstrap等の残骸が残っている可能性があるため、一度ボリューム内を完全に強制大掃除します
-echo "Clearing old volume remnants for a guaranteed fresh Shoestring setup..."
-rm -rf /app/target/* /app/target/.* 2>/dev/null || true
+# 完全にセットアップが完了している場合の判定用マーカー
+DONE_MARKER="/app/target/userconfig/resources/config-node.properties"
+
+if [ -f "$DONE_MARKER" ]; then
+    echo "=== Configuration already exists and is valid. Skipping shoestring setup. ==="
+    exit 0
+fi
 
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
@@ -28,7 +32,11 @@ ${MAIN_PRIVATE_KEY}
 EOF
 chmod 600 /app/ca.key.pem
 
-echo "Step 4: Running shoestring setup (Fresh Installation)..."
+echo "Step 3.5: Bypassing Shoestring DNS resolution check..."
+# 【ここが重要！】コンテナ内の /etc/hosts にドメインを強制登録し、DNS反映前でも名前解決を成功させます
+echo "127.0.0.1 ${DOMAIN_NAME}" >> /etc/hosts
+
+echo "Step 4: Running shoestring setup..."
 python3 -m shoestring setup \
   --config /app/shoestring.ini \
   --ca-key-path /app/ca.key.pem \

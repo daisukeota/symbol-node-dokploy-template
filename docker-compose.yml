@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   # 1. 初期化コンテナ
   initializer:
     build: ./initializer
     volumes:
-      - symbol_startup_v5:/app/dest_startup
-      - symbol_userconfig_v5:/app/dest_userconfig
-      - symbol_mongo_v5:/app/dest_mongo
-      - symbol_seed_v5:/app/dest_seed
+      - symbol_startup_v6:/app/dest_startup
+      - symbol_userconfig_v6:/app/dest_userconfig
+      - symbol_mongo_v6:/app/dest_mongo
+      - symbol_seed_v6:/app/dest_seed
     environment:
       - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
       - NODE_NAME=${NODE_NAME:-MyDokployNode}
@@ -25,7 +23,7 @@ services:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongodb_data_v5:/data/db
+      - mongodb_data_v6:/data/db
     restart: always
     networks:
       - dokploy-network
@@ -38,9 +36,10 @@ services:
     depends_on:
       - mongo
     volumes:
-      - symbol_startup_v5:/startup:ro
+      - symbol_startup_v6:/startup:ro
     network_mode: "service:mongo"
-    command: "/bin/bash /startup/mongors.sh"
+    # 👇【ここを劇的に強化！】MongoDBが応答を返すまで1秒ごとにループ待機し、確実にレプリカセットを初期化します
+    command: "until mongosh --eval 'db.runCommand({ping:1})' --quiet > /dev/null 2>&1; do echo 'Waiting for MongoDB to be ready...'; sleep 1; done; /bin/bash /startup/mongors.sh"
 
   # 4. Symbol Broker（承認エンジン）
   broker:
@@ -51,10 +50,10 @@ services:
       - initializer
       - mongo
     volumes:
-      - symbol_startup_v5:/startup:ro
-      - symbol_userconfig_v5:/userconfig:ro
-      - symbol_seed_v5:/seed:ro
-      - symbol_data_v5:/data        # 👈 v5に統一
+      - symbol_startup_v6:/startup:ro
+      - symbol_userconfig_v6:/userconfig:ro
+      - symbol_seed_v6:/seed:ro
+      - symbol_data_v6:/data
     command: "/bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
@@ -70,10 +69,10 @@ services:
       - initializer
       - broker
     volumes:
-      - symbol_startup_v5:/startup:ro
-      - symbol_userconfig_v5:/userconfig:ro
-      - symbol_seed_v5:/seed:ro
-      - symbol_data_v5:/data        # 👈 v5に統一
+      - symbol_startup_v6:/startup:ro
+      - symbol_userconfig_v6:/userconfig:ro
+      - symbol_seed_v6:/seed:ro
+      - symbol_data_v6:/data
     ports:
       - "7900:7900"
     command: "/bin/bash /startup/startServer.sh /userconfig"
@@ -91,8 +90,8 @@ services:
       - node
       - mongo
     volumes:
-      - symbol_startup_v5:/startup:ro
-      - symbol_userconfig_v5:/userconfig:ro
+      - symbol_startup_v6:/startup:ro
+      - symbol_userconfig_v6:/userconfig:ro
     ports:
       - "3000:3000"
     command: "/bin/bash /startup/delayrestapi.sh /userconfig"
@@ -104,11 +103,11 @@ networks:
   dokploy-network:
     external: true
 
-# 👈 すべての定義を不整合なく _v5 に統一しました
+# すべての定義を完璧に _v6 で統一
 volumes:
-  symbol_startup_v5:
-  symbol_userconfig_v5:
-  symbol_mongo_v5:
-  symbol_seed_v5:
-  symbol_data_v5:
-  mongodb_data_v5:
+  symbol_startup_v6:
+  symbol_userconfig_v6:
+  symbol_mongo_v6:
+  symbol_seed_v6:
+  symbol_data_v6:
+  mongodb_data_v6:

@@ -1,8 +1,7 @@
 #!/bin/bash
-# -e でエラー時に即死させ、-x で実行された行とエラーログをすべてDokployの画面に吐き出させます
-set -ex
+set -e
 
-echo "=== Symbol Node Initialization via Shoestring (Debug Mode) ==="
+echo "=== Symbol Node Initialization via Shoestring ==="
 
 # 必須の環境変数チェック
 if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
@@ -10,26 +9,26 @@ if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
-# すでに設定ファイルが存在する場合は再生成をスキップ
-if [ -f "/app/target/resources/config-node.properties" ]; then
-    echo "Configuration already exists. Skipping shoestring setup."
+# 完全にセットアップが完了している場合の判定用マーカー
+DONE_MARKER="/app/target/userconfig/resources/config-node.properties"
+
+if [ -f "$DONE_MARKER" ]; then
+    echo "=== Configuration already exists and is valid. Skipping shoestring setup. ==="
     exit 0
+fi
+
+# もしセットアップ未完了なのにディレクトリだけが存在する場合は、衝突を避けるため一度削除
+if [ -d "/app/target/userconfig" ]; then
+    echo "Found incomplete userconfig directory. Cleaning up for a fresh setup..."
+    rm -rf /app/target/userconfig
 fi
 
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
 
-echo "--- [DEBUG] Original Template Content ---"
-cat /app/shoestring.ini
-echo "-----------------------------------------"
-
-echo "Step 2: Dynamically injecting environment variables into template..."
-sed -i "s|domain =.*|domain = ${DOMAIN_NAME}|g" /app/shoestring.ini
-sed -i "s|name =.*|name = ${NODE_NAME:-MyDokployNode}|g" /app/shoestring.ini
-
-echo "--- [DEBUG] Patched Template Content ---"
-cat /app/shoestring.ini
-echo "-----------------------------------------"
+echo "Step 2: Dynamically injecting node configuration into template..."
+# [node] セクションの直後に、domain と name の設定行を確実に「挿入」します（networkセクションを壊しません）
+sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}" /app/shoestring.ini
 
 echo "Step 3: Preparing temporary CA Private Key PEM file..."
 cat << EOF > /app/ca.key.pem
@@ -40,14 +39,13 @@ EOF
 chmod 600 /app/ca.key.pem
 
 echo "Step 4: Running shoestring setup..."
-# ここでエラーが起きた場合、Pythonのスタックトレース（生の理由）がログに残ります
 python3 -m shoestring setup \
   --config /app/shoestring.ini \
   --ca-key-path /app/ca.key.pem \
   --directory /app/target \
   --package ${SYMBOL_NETWORK:-mainnet}
 
-# デバッグのため、成功時のみファイルを削除するように変更
+# セキュリティのため、使い終わった一時ファイル群は即座に完全消去
 rm -f /app/ca.key.pem /app/shoestring.ini
 
 echo "=== Initialization successfully completed! ==="

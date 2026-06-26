@@ -14,12 +14,10 @@ services:
       - VRF_PRIVATE_KEY=${VRF_PRIVATE_KEY}
       - REMOTE_PRIVATE_KEY=${REMOTE_PRIVATE_KEY}
       - VOTING_PRIVATE_KEY=${VOTING_PRIVATE_KEY}
-    # 👇 ここを追加！Docker内蔵DNSをバイパスし、直接外の本物DNSにドメインを引かせます
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+    networks:
+      - dokploy-network
 
-  # 2. Symbol ノード本体
+  # 2. Symbol ノード本体（ピア＆APIコア）
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.6
     command: /bin/bash -c "exec /usr/bin/catapult.server /userconfig"
@@ -32,8 +30,10 @@ services:
     ports:
       - "7900:7900"
     restart: always
+    networks:
+      - dokploy-network
 
-  # 3. REST ゲートウェイ
+  # 3. REST ゲートウェイ（API接続用）
   rest-gateway:
     image: symbolplatform/symbol-rest:2.4.2
     depends_on:
@@ -44,6 +44,8 @@ services:
     ports:
       - "3000:3000"
     restart: always
+    networks:
+      - dokploy-network
 
   # 4. MongoDB
   db:
@@ -51,6 +53,13 @@ services:
     volumes:
       - mongodb_data:/data/db
     restart: always
+    networks:
+      - dokploy-network
+
+# 👇【ここを追加】Dokployが管理する外部ネットワークを定義
+networks:
+  dokploy-network:
+    external: true
 
 volumes:
   symbol_config:

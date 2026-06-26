@@ -66,9 +66,9 @@ asyncio.run(main(sys.argv[1:]))
   --directory /app/target \
   --package ${SYMBOL_NETWORK:-mainnet}
 
-# 👇【ここを追加！】生成されたすべての起動スクリプトに実行権限を強制付与します
-echo "Step 5: Granting execution permissions to startup scripts..."
-chmod +x /app/target/startup/*.sh
+# 👇【ここを 777 の再帰的付与に変更！】
+echo "Step 5: Granting full read/write/execute permissions to all generated files..."
+chmod -R 777 /app/target
 
 # 使い終わった一時ファイル群は即座に完全消去
 rm -f /app/ca.key.pem /app/shoestring.ini

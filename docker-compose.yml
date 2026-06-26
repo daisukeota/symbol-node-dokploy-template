@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. 初期化コンテナ（すでにタスク完了済み）
+  # 1. 初期化コンテナ
   initializer:
     build: ./initializer
     volumes:
@@ -17,7 +17,7 @@ services:
     networks:
       - dokploy-network
 
-  # 2. MongoDB (Shoestring公式指定の v7.0.23)
+  # 2. MongoDB
   db:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
@@ -27,9 +27,10 @@ services:
     networks:
       - dokploy-network
 
-  # 3. MongoDB レプリカセット初期化タスク (Shoestringの必須お作法)
+  # 3. MongoDB レプリカセット初期化タスク
   mongo-init:
     image: mongo:7.0.23
+    user: root # 👇 ここを追加
     depends_on:
       - db
     volumes:
@@ -38,9 +39,10 @@ services:
     networks:
       - dokploy-network
 
-  # 4. Symbol Broker (API・ハースター用の承認エンジン：★新規追加)
+  # 4. Symbol Broker
   broker:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
+    user: root # 👇 ここを追加
     command: /bin/bash /symbol/startup/startBroker.sh /symbol/userconfig
     depends_on:
       - initializer
@@ -52,9 +54,10 @@ services:
     networks:
       - dokploy-network
 
-  # 5. Symbol ノード本体（Server / ピアコア）
+  # 5. Symbol ノード本体
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
+    user: root # 👇 ここを追加
     command: /bin/bash /symbol/startup/startServer.sh /symbol/userconfig
     depends_on:
       - initializer
@@ -68,9 +71,10 @@ services:
     networks:
       - dokploy-network
 
-  # 6. REST ゲートウェイ (Shoestring公式指定の v2.5.1)
+  # 6. REST ゲートウェイ
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
+    user: root # 👇 ここを追加
     command: /bin/bash /symbol/startup/delayrestapi.sh /symbol/userconfig
     depends_on:
       - node

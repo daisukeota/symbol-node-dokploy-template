@@ -5,7 +5,7 @@ services:
   initializer:
     build: ./initializer
     volumes:
-      - symbol_config_v1:/app/target # 👈 _v1 を追加
+      - symbol_config_v1:/app/target
     environment:
       - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
       - NODE_NAME=${NODE_NAME:-MyDokployNode}
@@ -22,7 +22,7 @@ services:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongodb_data_v1:/data/db # 👈 _v1 を追加
+      - mongodb_data_v1:/data/db
     restart: always
     networks:
       - dokploy-network
@@ -34,8 +34,9 @@ services:
     depends_on:
       - db
     volumes:
-      - symbol_config_v1:/symbol:ro # 👈 _v1 を追加
-    command: /bin/bash /symbol/startup/mongors.sh
+      - symbol_config_v1:/symbol:ro
+    # 👇 起動時に /startup のリンクを張ってから実行
+    command: /bin/bash -c "ln -s /symbol/startup /startup && exec /bin/bash /startup/mongors.sh"
     networks:
       - dokploy-network
 
@@ -43,13 +44,14 @@ services:
   broker:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
-    command: /bin/bash /symbol/startup/startBroker.sh /symbol/userconfig
     depends_on:
       - initializer
       - db
     volumes:
-      - symbol_config_v1:/symbol:ro # 👈 _v1 を追加
-      - symbol_data_v1:/data       # 👈 _v1 を追加
+      - symbol_config_v1:/symbol:ro
+      - symbol_data_v1:/data
+    # 👇 起動時に /startup と /userconfig のリンクを張ってから実行
+    command: /bin/bash -c "ln -s /symbol/startup /startup && ln -s /symbol/userconfig /userconfig && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     networks:
       - dokploy-network
@@ -58,15 +60,16 @@ services:
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
-    command: /bin/bash /symbol/startup/startServer.sh /symbol/userconfig
     depends_on:
       - initializer
       - broker
     volumes:
-      - symbol_config_v1:/symbol:ro # 👈 _v1 を追加
-      - symbol_data_v1:/data       # 👈 _v1 を追加
+      - symbol_config_v1:/symbol:ro
+      - symbol_data_v1:/data
     ports:
       - "7900:7900"
+    # 👇 起動時に /startup と /userconfig のリンクを張ってから実行
+    command: /bin/bash -c "ln -s /symbol/startup /startup && ln -s /symbol/userconfig /userconfig && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     networks:
       - dokploy-network
@@ -75,14 +78,15 @@ services:
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
-    command: /bin/bash /symbol/startup/delayrestapi.sh /symbol/userconfig
     depends_on:
       - node
       - db
     volumes:
-      - symbol_config_v1:/symbol:ro # 👈 _v1 を追加
+      - symbol_config_v1:/symbol:ro
     ports:
       - "3000:3000"
+    # 👇 起動時に /startup と /userconfig のリンクを張ってから実行
+    command: /bin/bash -c "ln -s /symbol/startup /startup && ln -s /symbol/userconfig /userconfig && exec /bin/bash /startup/delayrestapi.sh /userconfig"
     restart: always
     networks:
       - dokploy-network
@@ -91,7 +95,6 @@ networks:
   dokploy-network:
     external: true
 
-# 👇 実体として定義している末尾のボリューム名にもすべて _v1 を付与します
 volumes:
   symbol_config_v1:
   symbol_data_v1:

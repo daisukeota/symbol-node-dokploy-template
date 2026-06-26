@@ -66,9 +66,9 @@ asyncio.run(main(sys.argv[1:]))
   --directory /app/target \
   --package ${SYMBOL_NETWORK:-mainnet}
 
-# 👇【ここを 777 の再帰的付与に変更！】
 echo "Step 5: Granting full read/write/execute permissions to all generated files..."
-chmod -R 777 /app/target
+# 👇 末尾に || true を追加して安全装置を張ります
+chmod -R 777 /app/target || true
 
 # 使い終わった一時ファイル群は即座に完全消去
 rm -f /app/ca.key.pem /app/shoestring.ini

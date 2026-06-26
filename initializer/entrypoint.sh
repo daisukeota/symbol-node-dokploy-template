@@ -16,10 +16,7 @@ echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
 
 echo "Step 2: Injecting configuration lines directly under [node] section..."
-# [node]の直下にドメインと名前を挿入
 sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}" /app/shoestring.ini
-
-# 【ここを追加！】テンプレートで空欄になっている証明書用の各コモンネームを確実に上書きします
 sed -i "s|^caCommonName =.*|caCommonName = CA - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
 sed -i "s|^nodeCommonName =.*|nodeCommonName = Node - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
 
@@ -68,6 +65,10 @@ asyncio.run(main(sys.argv[1:]))
   --ca-key-path /app/ca.key.pem \
   --directory /app/target \
   --package ${SYMBOL_NETWORK:-mainnet}
+
+# 👇【ここを追加！】生成されたすべての起動スクリプトに実行権限を強制付与します
+echo "Step 5: Granting execution permissions to startup scripts..."
+chmod +x /app/target/startup/*.sh
 
 # 使い終わった一時ファイル群は即座に完全消去
 rm -f /app/ca.key.pem /app/shoestring.ini

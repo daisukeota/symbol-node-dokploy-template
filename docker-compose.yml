@@ -54,7 +54,7 @@ services:
       - symbol_startup_v5:/startup:ro
       - symbol_userconfig_v5:/userconfig:ro
       - symbol_seed_v5:/seed:ro
-      - symbol_data_v5:/data
+      - symbol_data_v5:/data        # 👈 v5に統一
     command: "/bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
@@ -73,7 +73,7 @@ services:
       - symbol_startup_v5:/startup:ro
       - symbol_userconfig_v5:/userconfig:ro
       - symbol_seed_v5:/seed:ro
-      - symbol_data_v4:/data   # データボリュームは同期実績維持のため以前のものを継承、または新規なら v5 でも構いません
+      - symbol_data_v5:/data        # 👈 v5に統一
     ports:
       - "7900:7900"
     command: "/bin/bash /startup/startServer.sh /userconfig"
@@ -104,11 +104,11 @@ networks:
   dokploy-network:
     external: true
 
-# 👇【修正】漏れていた symbol_seed_v5 をしっかり定義しました！
+# 👈 すべての定義を不整合なく _v5 に統一しました
 volumes:
   symbol_startup_v5:
   symbol_userconfig_v5:
   symbol_mongo_v5:
   symbol_seed_v5:
-  symbol_data_v4:
+  symbol_data_v5:
   mongodb_data_v5:

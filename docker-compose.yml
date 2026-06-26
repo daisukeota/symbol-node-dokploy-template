@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # 1. 初期化コンテナ（環境変数から設定ファイルを安全に自動生成）
+  initializer:
+    build: ./initializer
+    volumes:
+      - symbol_config:/app/target
+    environment:
+      - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
+      - NODE_NAME=${NODE_NAME:-MyDokployNode}
+      - DOMAIN_NAME=${DOMAIN_NAME}
+      - MAIN_PRIVATE_KEY=${MAIN_PRIVATE_KEY}
+      - VRF_PRIVATE_KEY=${VRF_PRIVATE_KEY}
+      - REMOTE_PRIVATE_KEY=${REMOTE_PRIVATE_KEY}
+      - VOTING_PRIVATE_KEY=${VOTING_PRIVATE_KEY}
+
+  # 2. Symbol ノード本体（ピア＆APIコア）
+  node:
+    image: symbolplatform/symbol-server:gcc-1.0.3.6
+    command: /bin/bash -c "exec /usr/bin/catapult.server /userconfig"
+    depends_on:
+      initializer:
+        condition: service_completed_successfully # 初期化が完全に終わったら起動
+    volumes:
+      - symbol_config:/userconfig:ro
+      - symbol_data:/data
+    ports:
+      - "7900:7900"
+    restart: always
+
+  # 3. REST ゲートウェイ（API接続用）
+  rest-gateway:
+    image: symbolplatform/symbol-rest:2.4.2
+    depends_on:
+      - node
+      - db
+    volumes:
+      - symbol_config:/userconfig:ro
+    ports:
+      - "3000:3000"
+    restart: always
+
+  # 4. MongoDB（APIのデータストア）
+  db:
+    image: mongo:4.4.3
+    volumes:
+      - mongodb_data:/data/db
+    restart: always
+
+volumes:
+  symbol_config: # 初期化された設定が格納されるボリューム
+  symbol_data:   # ブロックチェーンの生データが格納されるボリューム
+  mongodb_data: # APIのインデックスデータが格納されるボリューム

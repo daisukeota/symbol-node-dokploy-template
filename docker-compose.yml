@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. 初期化コンテナ
+  # 1. 初期化コンテナ（すでにタスク完了済み）
   initializer:
     build: ./initializer
     volumes:
@@ -17,15 +17,50 @@ services:
     networks:
       - dokploy-network
 
-  # 2. Symbol ノード本体（ピア＆APIコア）
-  node:
-    image: symbolplatform/symbol-server:gcc-1.0.3.6
-    command: /bin/bash -c "exec /usr/bin/catapult.server /userconfig"
-    depends_on:
-      initializer:
-        condition: service_completed_successfully
+  # 2. MongoDB (Shoestring公式指定の v7.0.23)
+  db:
+    image: mongo:7.0.23
+    command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - symbol_config:/userconfig:ro
+      - mongodb_data:/data/db
+    restart: always
+    networks:
+      - dokploy-network
+
+  # 3. MongoDB レプリカセット初期化タスク (Shoestringの必須お作法)
+  mongo-init:
+    image: mongo:7.0.23
+    depends_on:
+      - db
+    volumes:
+      - symbol_config:/symbol:ro
+    command: /bin/bash /symbol/startup/mongors.sh
+    networks:
+      - dokploy-network
+
+  # 4. Symbol Broker (API・ハースター用の承認エンジン：★新規追加)
+  broker:
+    image: symbolplatform/symbol-server:gcc-1.0.3.9
+    command: /bin/bash /symbol/startup/startBroker.sh /symbol/userconfig
+    depends_on:
+      - initializer
+      - db
+    volumes:
+      - symbol_config:/symbol:ro
+      - symbol_data:/data
+    restart: always
+    networks:
+      - dokploy-network
+
+  # 5. Symbol ノード本体（Server / ピアコア）
+  node:
+    image: symbolplatform/symbol-server:gcc-1.0.3.9
+    command: /bin/bash /symbol/startup/startServer.sh /symbol/userconfig
+    depends_on:
+      - initializer
+      - broker
+    volumes:
+      - symbol_config:/symbol:ro
       - symbol_data:/data
     ports:
       - "7900:7900"
@@ -33,30 +68,21 @@ services:
     networks:
       - dokploy-network
 
-  # 3. REST ゲートウェイ（API接続用）
+  # 6. REST ゲートウェイ (Shoestring公式指定の v2.5.1)
   rest-gateway:
-    image: symbolplatform/symbol-rest:2.4.2
+    image: symbolplatform/symbol-rest:2.5.1
+    command: /bin/bash /symbol/startup/delayrestapi.sh /symbol/userconfig
     depends_on:
       - node
       - db
     volumes:
-      - symbol_config:/userconfig:ro
+      - symbol_config:/symbol:ro
     ports:
       - "3000:3000"
     restart: always
     networks:
       - dokploy-network
 
-  # 4. MongoDB
-  db:
-    image: mongo:4.4.3
-    volumes:
-      - mongodb_data:/data/db
-    restart: always
-    networks:
-      - dokploy-network
-
-# 👇【ここを追加】Dokployが管理する外部ネットワークを定義
 networks:
   dokploy-network:
     external: true

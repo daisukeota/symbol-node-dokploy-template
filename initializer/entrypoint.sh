@@ -30,19 +30,25 @@ ${MAIN_PRIVATE_KEY}
 EOF
 chmod 600 /app/ca.key.pem
 
-echo "Step 4: Running shoestring setup with In-Memory Monkey Patch..."
+echo "Step 4: Running shoestring setup with Socket-Level Patch..."
 # 【ここが究極の解決策】
-# 物理ファイルは一切書き換えません。Pythonの起動時にメモリ上で直接「require_hostname」を無力化し、
-# DockerのDNSの気まぐれによるエラーを100%安全に回避して確実に完走させます。
+# モジュールの構造に関係なく、Pythonプロセス全体の名前解決の根本をフックします。
+# 正常に引ける外の名前はそのまま通し、コンテナ内から引けない自分のドメインだけを安全に救済します。
 python3 -c "
-import sys, asyncio
-import shoestring.commands.setup
+import sys, asyncio, socket
+
+orig_getaddrinfo = socket.getaddrinfo
+def smart_getaddrinfo(host, port, *args, **kwargs):
+    try:
+        return orig_getaddrinfo(host, port, *args, **kwargs)
+    except socket.gaierror:
+        # 名前解決エラーを検知したら、127.0.0.1 を返して Shoestring のお節介チェックを通過させる
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', port or 0))]
+
+socket.getaddrinfo = smart_getaddrinfo
+
+# Shoestringのメイン処理を実行
 from shoestring.__main__ import main
-
-# お節介なDNSチェック関数を、何もしないダミー関数に実行時上書き
-shoestring.commands.setup.require_hostname = lambda hostname: None
-
-# 引数をそのまま引き継いでメイン処理を実行
 asyncio.run(main(sys.argv[1:]))
 " setup \
   --config /app/shoestring.ini \

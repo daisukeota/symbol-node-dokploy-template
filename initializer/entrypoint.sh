@@ -23,7 +23,7 @@ sed -i "s|^nodeCommonName =.*|nodeCommonName = Node - ${NODE_NAME:-MyDokployNode
 
 echo "--- [DEBUG] Verified shoestring.ini Content ---"
 cat /app/shoestring.ini
------------------------------------------------
+echo "-----------------------------------------------"
 
 echo "Step 3: Preparing temporary CA Private Key PEM file from HEX string..."
 python3 -c "
@@ -61,14 +61,14 @@ asyncio.run(main(sys.argv[1:]))
   --package ${SYMBOL_NETWORK:-mainnet}
 
 echo "Step 5: Distributing generated files to target volumes with full permissions..."
-# 👇 送り先を _v4 基準にクリーンアップ
+# 送り先ボリュームの中身をクリーンアップ
 rm -rf /app/dest_startup/* /app/dest_userconfig/* /app/dest_mongo/* /app/dest_seed/* 2>/dev/null || true
 
 # 各ディレクトリの中身（隠しファイル含む）をそれぞれの永続ボリュームへ安全にコピー
 cp -a /app/target/startup/. /app/dest_startup/
 cp -a /app/target/userconfig/. /app/dest_userconfig/
 cp -a /app/target/mongo/. /app/dest_mongo/
-cp -a /app/target/seed/. /app/dest_seed/  # 👈 【ここを追加！】放置されていたseedデータを配送
+cp -a /app/target/seed/. /app/dest_seed/
 
 # 本番コンテナが誰でも実行・読込できるように権限をフルオープン化
 chmod -R 777 /app/dest_startup /app/dest_userconfig /app/dest_mongo /app/dest_seed || true

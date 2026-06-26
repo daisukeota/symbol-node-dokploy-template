@@ -5,7 +5,9 @@ services:
   initializer:
     build: ./initializer
     volumes:
-      - symbol_config_v1:/app/target
+      - symbol_startup_v2:/app/dest_startup
+      - symbol_userconfig_v2:/app/dest_userconfig
+      - symbol_mongo_v2:/app/dest_mongo
     environment:
       - SYMBOL_NETWORK=${SYMBOL_NETWORK:-mainnet}
       - NODE_NAME=${NODE_NAME:-MyDokployNode}
@@ -22,7 +24,7 @@ services:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
-      - mongodb_data_v1:/data/db
+      - mongodb_data_v2:/data/db
     restart: always
     networks:
       - dokploy-network
@@ -34,9 +36,8 @@ services:
     depends_on:
       - db
     volumes:
-      - symbol_config_v1:/symbol:ro
-    # 👇 起動時に /startup のリンクを張ってから実行
-    command: /bin/bash -c "ln -s /symbol/startup /startup && exec /bin/bash /startup/mongors.sh"
+      - symbol_startup_v2:/startup:ro
+    command: /bin/bash /startup/mongors.sh
     networks:
       - dokploy-network
 
@@ -48,10 +49,10 @@ services:
       - initializer
       - db
     volumes:
-      - symbol_config_v1:/symbol:ro
-      - symbol_data_v1:/data
-    # 👇 起動時に /startup と /userconfig のリンクを張ってから実行
-    command: /bin/bash -c "ln -s /symbol/startup /startup && ln -s /symbol/userconfig /userconfig && exec /bin/bash /startup/startBroker.sh /userconfig"
+      - symbol_startup_v2:/startup:ro
+      - symbol_userconfig_v2:/userconfig:ro
+      - symbol_data_v2:/data
+    command: /bin/bash /startup/startBroker.sh /userconfig
     restart: always
     networks:
       - dokploy-network
@@ -64,12 +65,12 @@ services:
       - initializer
       - broker
     volumes:
-      - symbol_config_v1:/symbol:ro
-      - symbol_data_v1:/data
+      - symbol_startup_v2:/startup:ro
+      - symbol_userconfig_v2:/userconfig:ro
+      - symbol_data_v2:/data
     ports:
       - "7900:7900"
-    # 👇 起動時に /startup と /userconfig のリンクを張ってから実行
-    command: /bin/bash -c "ln -s /symbol/startup /startup && ln -s /symbol/userconfig /userconfig && exec /bin/bash /startup/startServer.sh /userconfig"
+    command: /bin/bash /startup/startServer.sh /userconfig
     restart: always
     networks:
       - dokploy-network
@@ -82,11 +83,11 @@ services:
       - node
       - db
     volumes:
-      - symbol_config_v1:/symbol:ro
+      - symbol_startup_v2:/startup:ro
+      - symbol_userconfig_v2:/userconfig:ro
     ports:
       - "3000:3000"
-    # 👇 起動時に /startup と /userconfig のリンクを張ってから実行
-    command: /bin/bash -c "ln -s /symbol/startup /startup && ln -s /symbol/userconfig /userconfig && exec /bin/bash /startup/delayrestapi.sh /userconfig"
+    command: /bin/bash /startup/delayrestapi.sh /userconfig
     restart: always
     networks:
       - dokploy-network
@@ -95,7 +96,10 @@ networks:
   dokploy-network:
     external: true
 
+# 用途別に分割定義されたクリーンな新ボリューム群
 volumes:
-  symbol_config_v1:
-  symbol_data_v1:
-  mongodb_data_v1:
+  symbol_startup_v2:
+  symbol_userconfig_v2:
+  symbol_mongo_v2:
+  symbol_data_v2:
+  mongodb_data_v2:

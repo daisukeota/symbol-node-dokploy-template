@@ -9,8 +9,9 @@ if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
-echo "Cleaning up target directory for a fresh initialization..."
-rm -rf /app/target/* /app/target/.* 2>/dev/null || true
+# 純粋なコンテナ内ローカル領域を初期化
+rm -rf /app/target
+mkdir -p /app/target
 
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
@@ -27,16 +28,12 @@ echo "-----------------------------------------------"
 echo "Step 3: Preparing temporary CA Private Key PEM file from HEX string..."
 python3 -c "
 import base64
-
 hex_key = '${MAIN_PRIVATE_KEY}'.strip()
 raw_bytes = bytes.fromhex(hex_key)
-
 prefix = bytes.fromhex('302e020100300506032b657004220420')
 pkcs8_bytes = prefix + raw_bytes
-
 pem_body = base64.b64encode(pkcs8_bytes).decode('utf-8')
 pem_lines = [pem_body[i:i+64] for i in range(0, len(pem_body), 64)]
-
 with open('/app/ca.key.pem', 'w') as f:
     f.write('-----BEGIN PRIVATE KEY-----\n')
     for line in pem_lines:
@@ -48,16 +45,13 @@ chmod 600 /app/ca.key.pem
 echo "Step 4: Running shoestring setup with Socket-Level Patch..."
 python3 -c "
 import sys, asyncio, socket
-
 orig_getaddrinfo = socket.getaddrinfo
 def smart_getaddrinfo(host, port, *args, **kwargs):
     try:
         return orig_getaddrinfo(host, port, *args, **kwargs)
     except socket.gaierror:
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', port or 0))]
-
 socket.getaddrinfo = smart_getaddrinfo
-
 from shoestring.__main__ import main
 asyncio.run(main(sys.argv[1:]))
 " setup \
@@ -66,9 +60,17 @@ asyncio.run(main(sys.argv[1:]))
   --directory /app/target \
   --package ${SYMBOL_NETWORK:-mainnet}
 
-echo "Step 5: Granting full read/write/execute permissions to all generated files..."
-# 👇 末尾に || true を追加して安全装置を張ります
-chmod -R 777 /app/target || true
+echo "Step 5: Distributing generated files to target volumes with full permissions..."
+# 各送り先ボリュームの中身をクリーンアップ
+rm -rf /app/dest_startup/* /app/dest_userconfig/* /app/dest_mongo/* 2>/dev/null || true
+
+# ディレクトリの中身（隠しファイル含む）をそれぞれの永続ボリュームへ安全にコピー
+cp -a /app/target/startup/. /app/dest_startup/
+cp -a /app/target/userconfig/. /app/dest_userconfig/
+cp -a /app/target/mongo/. /app/dest_mongo/
+
+# 本番コンテナが誰でも実行・読込できるように権限をフルオープン化
+chmod -R 777 /app/dest_startup /app/dest_userconfig /app/dest_mongo || true
 
 # 使い終わった一時ファイル群は即座に完全消去
 rm -f /app/ca.key.pem /app/shoestring.ini

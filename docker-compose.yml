@@ -82,7 +82,7 @@ services:
       - symbol_userconfig_v6:/userconfig:ro
       - symbol_seed_v6:/seed:ro
       - symbol_data_v6:/data
-    command: /bin/bash /startup/startBroker.sh /userconfig
+    command: /bin/bash -c "mkdir -p /data/startup && touch /data/startup/datadir-initialized && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
@@ -103,7 +103,7 @@ services:
       - symbol_data_v6:/data
     ports:
       - "7900:7900"
-    command: /bin/bash /startup/startServer.sh /userconfig
+    command: /bin/bash -c "mkdir -p /data/startup && touch /data/startup/mongo-initialized && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:

@@ -9,17 +9,26 @@ if [ -z "$MAIN_PRIVATE_KEY" ] || [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
-# ⚠️ 前回のDNSエラー時の中途半端な残骸を一度確実に大掃除します。
-# これにより、DNSチェック回避を仕込んだ本番のセットアップを強制的に完走させます。
-echo "Clearing incomplete setup remnants to ensure DNS-bypass setup runs..."
+# 前回のゴミや中途半端な生成物を一度確実にクリーンアップ
+echo "Cleaning up target directory for a fresh initialization..."
 rm -rf /app/target/* /app/target/.* 2>/dev/null || true
 
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
 
-echo "Step 2: Dynamically injecting node configuration into template..."
-# [node] セクションの直後に、domain と name の設定行を確実に挿入
-sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}" /app/shoestring.ini
+echo "Step 2: Dynamically injecting node configuration via Python configparser..."
+# sedを使わず、Pythonの機能で安全かつ確実に[node]セクションへドメインと名前を注入します
+python3 -c "
+import configparser
+config = configparser.ConfigParser()
+config.read('/app/shoestring.ini')
+if 'node' not in config:
+    config['node'] = {}
+config['node']['domain'] = '${DOMAIN_NAME}'
+config['node']['name'] = '${NODE_NAME:-MyDokployNode}'
+with open('/app/shoestring.ini', 'w') as f:
+    config.write(f)
+"
 
 echo "Step 3: Preparing temporary CA Private Key PEM file..."
 cat << EOF > /app/ca.key.pem

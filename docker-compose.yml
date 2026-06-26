@@ -28,7 +28,7 @@ services:
     networks:
       - dokploy-network
 
-# 3. MongoDB レプリカセット初期化タスク（★ここを完全に書き換えます）
+  # 3. MongoDB レプリカセット初期化タスク
   mongo-init:
     image: mongo:7.0.23
     user: root
@@ -39,7 +39,7 @@ services:
     network_mode: "service:mongo"
     command:
       - /bin/bash
-      - -e -c        # 👈 -e を追加。途中でエラーがあれば即座に検知させます
+      - -ec         # 👈 【修正】オプションのパースエラーを修正しました
       - |
         echo "=== MongoDB ReplicaSet Initialization Task ==="
         echo "1. Waiting for MongoDB to become responsive..."
@@ -50,7 +50,6 @@ services:
         echo "MongoDB is officially responsive!"
 
         echo "2. Enforcing ReplicaSet Initiation directly via native mongosh..."
-        # 外部の本番コンテナ（node等）がネットワーク越しに解決できるよう、ホスト名 'mongo' を明示して強制結合します
         mongosh --eval "
           try {
             var status = rs.status();

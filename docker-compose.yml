@@ -103,11 +103,12 @@ services:
       - symbol_certificates:/certificates:ro
       - symbol_data_node:/data
     ports:
-      - "7900:7900"  # P2P通信ポートを公開
+      - "7900:7900"
     networks:
       dokploy-network:
         aliases:
-          - client   # 👈 【超重要】RESTが"client"という名前で探しに来るため、DNSエイリアスを付与
+          - client
+          - ${DOMAIN_NAME} # 👈 【超重要】APIサーバーがドメイン名で名前解決できるようにエイリアスを追加！
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
@@ -126,9 +127,7 @@ services:
       - symbol_userconfig:/userconfig:ro
       - symbol_certificates:/certificates:ro
     ports:
-      - "3000:3000"  # APIポートを公開
-    environment:
-      - NODE_TLS_REJECT_UNAUTHORIZED=0  # 👈 【超重要】コンテナ間の厳格な内部TLS検証を安全にスキップ
+      - "3000:3000"
     networks:
       - dokploy-network
     command: npm start --prefix /app /userconfig/rest.json

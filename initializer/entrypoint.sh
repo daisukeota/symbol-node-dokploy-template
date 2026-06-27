@@ -77,6 +77,9 @@ asyncio.run(main(sys.argv[1:]))
   --package ${SYMBOL_NETWORK:-mainnet} \
   --overrides /app/overrides.ini
 
+echo "Step 4.5: Patching rest.json to use the official DOMAIN_NAME for SNI matching..."
+sed -i "s|\"host\": \"client\"|\"host\": \"${DOMAIN_NAME}\"|g" /app/target/userconfig/rest.json
+
 echo "Step 5: Distributing generated files to target volumes with full permissions..."
 rm -rf /app/dest_startup/* /app/dest_userconfig/* /app/dest_mongo/* /app/dest_seed/* /app/dest_certificates/* 2>/dev/null || true
 

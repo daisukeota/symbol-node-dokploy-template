@@ -62,6 +62,13 @@ services:
             print('Replica set already initialized or skipped: ' + e.message);
           }
         " --quiet || true
+
+        # 👇 ここを追加：PRIMARY に昇格するまで安全に待機します
+        echo "Waiting for MongoDB to elect a PRIMARY node..."
+        until mongosh --host db --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
+          sleep 1
+        done
+        echo "MongoDB is now PRIMARY and ready for writes!"
         exit 0
 
   # 4. Symbol Broker

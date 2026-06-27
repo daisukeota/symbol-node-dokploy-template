@@ -120,7 +120,7 @@ services:
       - symbol_userconfig:/userconfig:ro
     ports:
       - "3000:3000"
-    command: /bin/bash -c "cd /usr/src/rest && npm start"
+    command: /bin/bash -c "node /app/src/index.js"
     restart: always
     networks:
       - dokploy-network

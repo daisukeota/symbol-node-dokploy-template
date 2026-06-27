@@ -24,6 +24,14 @@ host = ${DOMAIN_NAME}
 friendlyName = ${NODE_NAME:-MyDokployNode}
 EOF
 
+if [ -n "$BENEFICIARY_ADDRESS" ]; then
+    cat << EOF >> /app/overrides.ini
+
+[harvesting]
+beneficiaryAddress = ${BENEFICIARY_ADDRESS}
+EOF
+fi
+
 echo "Step 3: Preparing temporary CA Private Key PEM file from HEX string..."
 python3 -c "
 import base64

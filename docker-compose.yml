@@ -28,7 +28,6 @@ services:
     restart: always
     networks:
       - dokploy-network
-    # mongo単体での生存確認ヘルスチェックを定義
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.runCommand({ping:1})", "--quiet"]
       interval: 3s
@@ -41,7 +40,7 @@ services:
     user: root
     depends_on:
       mongo:
-        condition: service_healthy # mongoがReadyになるまで絶対に動かない
+        condition: service_healthy
     volumes:
       - symbol_startup:/startup:ro
     network_mode: "service:mongo"
@@ -63,16 +62,17 @@ services:
     user: root
     depends_on:
       initializer:
-        condition: service_completed_successfully # initializerが「正常終了」するまで絶対にマウントさせない
+        condition: service_completed_successfully
       mongo-init:
-        condition: service_completed_successfully # DB初期化が終わるまで待つ
+        condition: service_completed_successfully
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_broker:/data
-    command: /bin/bash -c "rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
+    # 内部スクリプトが求めるフラグ作成処理（mkdir & touch）を完全復元
+    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
@@ -84,7 +84,7 @@ services:
     user: root
     depends_on:
       initializer:
-        condition: service_completed_successfully # 同上
+        condition: service_completed_successfully
       broker:
         condition: service_started
     volumes:
@@ -95,7 +95,8 @@ services:
       - symbol_data_node:/data
     ports:
       - "7900:7900"
-    command: /bin/bash -c "rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
+    # 内部スクリプトが求めるフラグ作成処理（mkdir & touch）を完全復元
+    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
@@ -107,7 +108,7 @@ services:
     user: root
     depends_on:
       initializer:
-        condition: service_completed_successfully # これによりrest.jsonがフォルダになるバグを100%防ぐ
+        condition: service_completed_successfully
       node:
         condition: service_started
     volumes:
@@ -115,8 +116,8 @@ services:
       - symbol_userconfig:/userconfig:ro
     ports:
       - "3000:3000"
-    # 先ほど特定した正しいパスと、実行ディレクトリの移動を美しく内包
-    command: /bin/bash -c "cd /app/src && node index.js"
+    # 設定展開ロジックを持つ公式スクリプト経由の起動に安全に戻す
+    command: /bin/bash /startup/delayrestapi.sh /userconfig
     restart: always
     networks:
       - dokploy-network

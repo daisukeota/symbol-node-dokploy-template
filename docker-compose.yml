@@ -34,7 +34,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # 3. MongoDB レプリカセット初期化
+# 3. MongoDB レプリカセット初期化タスク
   mongo-init:
     image: mongo:7.0.23
     user: root
@@ -47,15 +47,22 @@ services:
       - dokploy-network
     command:
       - /bin/bash
-      - -ec
+      - -c
       - |
+        echo "Waiting for db connection..."
+        until mongosh --host db --eval "db.runCommand({ping:1})" --quiet; do
+          sleep 1
+        done
+        
+        echo "Initializing replica set..."
         mongosh --host db --eval "
           try {
-            rs.status();
-          } catch (e) {
             rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'db:27017' }] });
+          } catch (e) {
+            print('Replica set already initialized or skipped: ' + e.message);
           }
-        " --quiet
+        " --quiet || true
+        exit 0
 
   # 4. Symbol Broker
   broker:

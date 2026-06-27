@@ -127,9 +127,10 @@ services:
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
-      - symbol_certificates:/certificates:ro # 👈 【超重要】これをつなぎ込みます！
+      - symbol_certificates:/certificates:ro
     network_mode: "service:db"
-    command: npm start --prefix /app /userconfig/rest.json
+    # 👇 起動直前に 'client' などの名前をすべて 127.0.0.1 に紐付けるトリックを仕込みます
+    command: /bin/bash -c "echo '127.0.0.1 db client broker' >> /etc/hosts && exec npm start --prefix /app /userconfig/rest.json"
     restart: always
 
 networks:

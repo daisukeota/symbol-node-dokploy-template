@@ -22,7 +22,7 @@ services:
   # 2. データベース本体
   db:
     image: mongo:7.0.23
-    hostname: db # 👈 【超重要】これでお互いの名前の不一致を完璧に解消します！
+    hostname: db  # 👈 独立ネットワーク内で、自分が「db」であることをMongoDBに自覚させます
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongodb_data:/data/db
@@ -42,8 +42,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - symbol_startup:/startup:ro
     networks:
       - dokploy-network
     command:
@@ -108,7 +106,7 @@ services:
       - symbol_certificates:/certificates:ro
       - symbol_data_node:/data
     ports:
-      - "7900:7900"
+      - "7900:7900"  # 本体のポートは通常通りここで公開
     networks:
       - dokploy-network
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
@@ -128,7 +126,7 @@ services:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
     ports:
-      - "3000:3000"
+      - "3000:3000"  # REST APIのポートは通常通りここで公開
     networks:
       - dokploy-network
     command: /bin/bash /startup/delayrestapi.sh /userconfig

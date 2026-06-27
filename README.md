@@ -1,80 +1,86 @@
-# Symbol Node on Dokploy (Shoestring Based)
+# Symbol Node Dokploy Template
 
-Dokploy 上で Symbol のフルノード（Peer Node, Broker, REST Gateway, MongoDB）を、完全自動かつ頑健にデプロイするための Docker Compose テンプレートです。
+Dokploy上でSymbolのAPI/Peer（Dual）ノードを安全、高速、かつメンテナンスフリーでデプロイするためのDocker Composeテンプレートです。
 
-最新の構築ツール **Shoestring** の仕様変更や、コンテナ環境特有のレースコンディション（起動タイミングの競合）をすべてクリアした最適化済みの構成となっています。
+Shoestringによる初期設定の自動化、不安定なピアからの切断に対する自動フォールバックパッチ、およびDokployのネットワーク仕様に最適化されたルーティングが組み込まれています。
 
-## 🚀 特徴（インフラ最適化ポイント）
+## 🚀 特徴
 
-- **レプリカセット自動待機ロジック**: MongoDB が完全に Ready になるまでヘルスチェックを回してから `rs0` を初期化するため、初回起動時のコンテナ即死ループが起きません。
-- **データ領域の完全分離**: ロック競合（`LockOpen failed: 17`）を防ぐため、Broker と Node のデータボリュームを完全に切り離しています。
-- **不揮発性ロックファイルの自動掃除**: 異常終了時に残って再起動を阻害する古い `.lock` 残骸を、コンテナ起動時に自動パージします。
-- **証明書自動探索配送**: Shoestring が生成する暗号化証明書（`ca.pubkey.pem` 等）を自動で見つけ出し、本番コンテナへ安全にマウント配送します。
+- **Dokploy最適化ネットワーク**: `network_mode`の競合や循環依存を完全に回避し、Symbol特有の厳格なmTLS/SNI検証を100%ネイティブにクリアします。
+- **耐障害性初期化スクリプト**: セットアップ中に外部の接続先ピアが突然切断（Drop）しても、自動的に超安定なRESTノード（allnodes等）へ切り替えて処理を続行するパッチが内蔵されています。
+- **完全データ保護**: 設定ファイルや証明書が更新されても、それまでに同期したギガバイト単位のブロックデータ（MongoDB/Catapultデータ）は安全に維持されます。
 
-## 📂 構成ファイル
+## 🛠️ 事前準備（環境変数の設定）
 
-```text
-├── docker-compose.yml      # 全サービスの設定とボリューム定義
-└── initializer/
-    ├── Dockerfile          # Shoestring 実行用環境
-    └── entrypoint.sh       # 設定自動生成＆ボリューム配送スクリプト
-```
+Dokployのプロジェクト管理画面の **「Environment」** タブで、以下の環境変数を必ず設定してください。
 
-## 🛠️ 前提条件・準備するもの
+| 環境変数名 | 設定値の例 / 説明 |
+| :--- | :--- |
+| `SYMBOL_NETWORK` | `mainnet` (デフォルト) または `testnet` |
+| `NODE_NAME` | あなたのノードのニックネーム（例: `My-Awesome-SymbolNode`） |
+| `DOMAIN_NAME` | ノードを外部公開するDNSドメイン（例: `node.example.com`） |
+| `MAIN_PRIVATE_KEY` | ノードのメインアカウントの秘密鍵（64文字の16進数） |
+| `VRF_PRIVATE_KEY` | VRFアカウントの秘密鍵 |
+| `REMOTE_PRIVATE_KEY` | リモートアカウントの秘密鍵 |
+| `VOTING_PRIVATE_KEY` | 投票用アカウントの秘密鍵（※任意、ハーベスティングのみなら空でも可） |
 
-1. **Dokploy** がインストールされた VPS（Ubuntu等）
-2. **ドメイン名**（例: `node.apps.neoflow.jp`）
-3. **各種秘密鍵（HEX 64文字）**
-   - `MAIN_PRIVATE_KEY`（必須・ノードの主勘定）
-   - `VRF_PRIVATE_KEY`
-   - `REMOTE_PRIVATE_KEY`
-   - `VOTING_PRIVATE_KEY`
+## 📦 デプロイ手順
 
-## ⚙️ 構築手順
+### 1. リポジトリの紐付け
+Dokployの「Compose」サービス作成画面で、このリポジトリのGit URLを指定します。
+`https://github.com/daisukeota/symbol-node-dokploy-template.git`
 
-### 1. DNS とファイアウォールの設定
-- **DNS設定**: 使用するドメイン（Aレコード）を VPS のグローバルIPアドレスに向けて設定します。
-- **ファイアウォール開放**: VPS のインバウンド（受信）ルールで、以下のポートを開放してください。
-  - `80 / 443` (TCP): Dokploy / SSL 認証用
-  - `7900` (TCP): Symbol P2P 通信用（**必須**）
+### 2. 環境変数の入力
+上記の「事前準備」に記載された環境変数をすべて入力し、保存します。
 
-### 2. Dokploy でのアプリケーション作成
-1. Dokploy にログインし、**「Create Compose」** から新しいプロジェクトを作成します。
-2. リポジトリ（GitHub等）と連携し、本リポジトリの `docker-compose.yml` を読み込ませます。
+### 3. ⚠️【超重要】ドメインの設定（ルーティングの肝）
+Dokployの **「Domains」** 設定を開き、あなたのドメイン（例: `node.example.com`）を割り当てます。その際、ターゲットとなるサービスとポートを**必ず以下のように指定してください。**
 
-### 3. 環境変数の登録
-Dokploy の **「Environment」** タブを開き、以下の環境変数をすべて登録します。
+- **Service:** `db`
+- **Port:** `3000`
 
-| 変数名 | 説明 | 例 |
-| :--- | :--- | :--- |
-| `DOMAIN_NAME` | ノードを公開するドメイン | `node.apps.neoflow.jp` |
-| `MAIN_PRIVATE_KEY` | メインアカウントの秘密鍵 | `(64文字のHEX)` |
-| `VRF_PRIVATE_KEY` | VRFアカウントの秘密鍵 | `(64文字のHEX)` |
-| `REMOTE_PRIVATE_KEY` | リモートアカウントの秘密鍵 | `(64文字のHEX)` |
-| `VOTING_PRIVATE_KEY` | 投票アカウントの秘密鍵 | `(64文字のHEX)` |
-| `NODE_NAME` | ノードの表示名（任意） | `MyDokployNode` |
-| `SYMBOL_NETWORK` | ネットワーク（デフォルト: mainnet）| `mainnet` |
+> 💡 **なぜ `rest-gateway` ではなく `db` なのか？**
+> Dokployはドメインを設定したサービスに対し、裏側で強制的に専用のネットワークを注入する仕様があります。
+> 本テンプレートでは、Symbolの厳格な暗号化通信（mTLS）をパスさせるため、全コンテナのネットワーク空間を`db`に一本化（同居）させています。ルーティングの親玉である`db`の3000番ポート宛てのWEBトラフィックは、同居している`rest-gateway`が自動的にネイティブキャッチするため、外からは完全にAPIサーバーとして正しく機能します。
 
-### 4. 外部ドメイン（REST API）の紐付け
-1. Dokploy の該当 Compose 画面で **「Domains」** タブを開きます。
-2. **「Add Domain」** をクリックし、以下を設定します。
-   - **Domain**: 設定したドメイン（例: `node.apps.neoflow.jp`）
-   - **Service**: `rest-gateway`
-   - **Container Port**: `3000`
-   - **Certificate (SSL)**: Let's Encrypt にチェックを入れて有効化
-
-### 5. デプロイの実行
-「Environment」および「Domains」の設定が完了したら、**「Deploy」** をクリックします。
-
-`initializer` と `mongo-init` が全自動で足回りを構築し、正常終了（Exited 0）した後に本番ノード群が一斉に立ち上がります。
+### 4. デプロイの実行
+設定が完了したら、 **`[Deploy]`** ボタンをクリックします。
+初期化（initializer）コンテナが走り、設定ファイルが自動生成された後、ノード本体とAPIサーバーが一斉に起動します。
 
 ## 🔍 動作確認
 
-デプロイ完了後、数分待ってからブラウザや `curl` で以下にアクセスしてください。
-- `https://<あなたのドメイン>/node/info`
+デプロイ完了後、C++ノード本体がデータベースの検証等を行って完全に目覚めるまで **1〜2分ほど** かかります。起動直後はAPI（3000番）へのアクセスで `503 Service Unavailable` が出ることがありますが、これは正常な時間差です。
 
-ノードのステータスが JSON で綺麗に返ってくれば、無事に世界中のピアと接続され、ブロックチェーンの同期が開始されています。
+のんびり待った後、ブラウザやターミナルから以下にアクセスしてください。
+`https://あなたのDOMAIN_NAME/node/info`
+
+以下のように、あなたが指定した `friendlyName` と `host` が美しく刻まれたJSONが返ってくれば、無事に世界へ大開通です！
+
+```json
+{
+  "version": 16777993,
+  "publicKey": "...",
+  "roles": 7,
+  "port": 7900,
+  "host": "node.example.com",
+  "friendlyName": "My-Awesome-SymbolNode"
+}
+```
+
+## 🧹 ブロックデータを消さずに設定（ノード名など）だけを更新する方法
+
+「ノード名を変更したい」「環境変数を書き換えた」という場合、これまで同期した巨大なブロックデータを一切失うことなく、設定ファイルだけを安全にリフレッシュする手順です。
+
+1. Dokploy画面で **`[Stop]`** をクリックし、スタックを停止させます。
+2. VPSのターミナルにSSHでログインし、以下のコマンドを実行して**設定ボリュームの3つだけを狙い撃ちで削除**します。
+   ```bash
+   docker rm $(docker ps -a -q --filter name=symbolnode) 2>/dev/null || true
+   docker volume rm プロジェクト名_symbol_startup プロジェクト名_symbol_userconfig プロジェクト名_symbol_certificates
+   ```
+   *(※ 生データである `symbol_data_node` と `mongodb_data` は絶対に対象に入れないでください)*
+3. Dokploy画面に戻り、再び **`[Deploy]`** をクリックします。
+4. 新しい環境変数を吸い込んだ設定ファイルが再生成され、ブロックデータは前回の続き（数GB〜）から何事もなかったかのように爆速で同期が再開されます。
 
 ## 📄 ライセンス
 
-[MIT License](LICENSE)
+MIT License

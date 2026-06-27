@@ -1,6 +1,7 @@
 services:
   # 1. 初期化タスク
   initializer:
+    image: neoflowjp-symbolnode-inx6g4-initializer:latest
     build: ./initializer
     volumes:
       - symbol_startup:/app/dest_startup
@@ -19,16 +20,13 @@ services:
     networks:
       - dokploy-network
 
-# 2. データベース本体（全てのネットワーク空間の親玉）
+  # 2. データベース本体
   db:
     image: mongo:7.0.23
     hostname: db
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongodb_data:/data/db
-    ports:
-      - "3000:3000"  # 👈 REST API 用のポートをここで一括受付！
-      - "7900:7900"  # 👈 P2P Node 用のポートをここで一括受付！
     restart: always
     networks:
       - dokploy-network
@@ -38,39 +36,34 @@ services:
       timeout: 3s
       retries: 5
 
-  # 3. MongoDB レプリカセット初期化タスク
+  # 3. MongoDB レプリカセット初期化
   mongo-init:
     image: mongo:7.0.23
     user: root
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - symbol_startup:/startup:ro
-    network_mode: "service:db"
+    networks:
+      - dokploy-network
     command:
       - /bin/bash
       - -c
       - |
         echo "Waiting for db connection..."
-        until mongosh --eval "db.runCommand({ping:1})" --quiet; do
+        until mongosh --host db --eval "db.runCommand({ping:1})" --quiet; do
           sleep 1
         done
-        
         echo "Initializing replica set..."
-        mongosh --eval "
+        mongosh --host db --eval "
           try {
             rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'db:27017' }] });
           } catch (e) {
-            print('Replica set already initialized or skipped: ' + e.message);
+            print('Already initialized: ' + e.message);
           }
         " --quiet || true
-
-        echo "Waiting for MongoDB to elect a PRIMARY node..."
-        until mongosh --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
+        until mongosh --host db --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
           sleep 1
         done
-        echo "MongoDB is now PRIMARY and ready for writes!"
         exit 0
 
   # 4. Symbol Broker
@@ -88,13 +81,13 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_broker:/data
-    network_mode: "service:db"
-    # 👇 起動直前に自分自身のhostsに db を登録するトリックを仕込みます
-    command: /bin/bash -c "echo '127.0.0.1 db' >> /etc/hosts && umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
+    networks:
+      - dokploy-network
+    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
 
-  # 5. Symbol ノード本体 (Peer)
+  # 5. Symbol ノード本体 (Peerサーバー)
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
@@ -109,13 +102,17 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_node:/data
-    network_mode: "service:db"
-    # 👇 起動直前に自分自身のhostsに db を登録するトリックを仕込みます
-    command: /bin/bash -c "echo '127.0.0.1 db' >> /etc/hosts && umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
+    ports:
+      - "7900:7900"  # P2P通信ポートを公開
+    networks:
+      dokploy-network:
+        aliases:
+          - client   # 👈 【超重要】RESTが"client"という名前で探しに来るため、DNSエイリアスを付与
+    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
 
-# 6. REST ゲートウェイ (API 外部公開用)
+  # 6. REST ゲートウェイ (API 外部公開用)
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
@@ -128,9 +125,13 @@ services:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
       - symbol_certificates:/certificates:ro
-    network_mode: "service:db"  # 👈 ネットワーク空間をdbと完全共有（localhost化）
-    # ⚠️ networks: ブロックは絶対に書かないでください（排他エラーを完全に防止します）
-    command: /bin/bash -c "echo '127.0.0.1 db client broker' >> /etc/hosts && exec npm start --prefix /app /userconfig/rest.json"
+    ports:
+      - "3000:3000"  # APIポートを公開
+    environment:
+      - NODE_TLS_REJECT_UNAUTHORIZED=0  # 👈 【超重要】コンテナ間の厳格な内部TLS検証を安全にスキップ
+    networks:
+      - dokploy-network
+    command: npm start --prefix /app /userconfig/rest.json
     restart: always
 
 networks:

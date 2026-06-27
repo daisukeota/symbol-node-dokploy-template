@@ -40,7 +40,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # 3. MongoDB レプリカセット初期化
+# 3. MongoDB レプリカセット初期化 + スキーマ適用
   mongo-init:
     image: mongo:7.0.23
     user: root
@@ -48,6 +48,8 @@ services:
       db:
         condition: service_healthy
     network_mode: "service:db"
+    volumes:
+      - symbol_mongo:/mongo:ro  # 👈 【追加】Shoestringが作ったDB初期化ファイルをマウント
     command:
       - /bin/bash
       - -c
@@ -67,6 +69,16 @@ services:
         until mongosh --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
           sleep 1
         done
+        
+        # 👈 【追加】ここから下の4行でSymbol専用のテーブル構造とインデックスを適用します
+        echo "Applying Symbol DB schemas and indexes..."
+        if [ -f /mongo/mongoDbPrepare.js ]; then
+          mongosh "mongodb://db:27017/catapult" < /mongo/mongoDbPrepare.js
+          echo "Symbol DB preparation completed successfully."
+        else
+          echo "ERROR: /mongo/mongoDbPrepare.js not found!"
+          exit 1
+        fi
         exit 0
 
   # 4. Symbol Broker

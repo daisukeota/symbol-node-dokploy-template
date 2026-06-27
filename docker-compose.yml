@@ -1,5 +1,5 @@
 services:
-  # 1. 初期化タスク（Shoestringによる鍵・設定ファイル生成）
+  # 1. 初期化タスク
   initializer:
     build: ./initializer
     volumes:
@@ -19,12 +19,16 @@ services:
     networks:
       - dokploy-network
 
-  # 2. データベース本体
+  # 2. データベース本体（ネットワークの親になります）
   mongo:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongodb_data:/data/db
+    # ポートの公開をすべてこの親コンテナに集約します！
+    ports:
+      - "7900:7900"  # node用
+      - "3000:3000"  # rest-gateway用
     restart: always
     networks:
       - dokploy-network
@@ -34,7 +38,7 @@ services:
       timeout: 3s
       retries: 5
 
-  # 3. MongoDB レプリカセット初期化タスク
+  # 3. MongoDB レプリカセット初期化
   mongo-init:
     image: mongo:7.0.23
     user: root
@@ -71,12 +75,10 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_broker:/data
-    # 内部スクリプトが求めるフラグ作成処理（mkdir & touch）を完全復元
+    network_mode: "service:mongo" # ネットワークをmongoと合体！
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
-    networks:
-      - dokploy-network
 
   # 5. Symbol ノード本体 (Peer)
   node:
@@ -93,14 +95,10 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_node:/data
-    ports:
-      - "7900:7900"
-    # 内部スクリプトが求めるフラグ作成処理（mkdir & touch）を完全復元
+    network_mode: "service:mongo" # ネットワークをmongoと合体！
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
-    networks:
-      - dokploy-network
 
   # 6. REST ゲートウェイ（API）
   rest-gateway:
@@ -114,13 +112,9 @@ services:
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
-    ports:
-      - "3000:3000"
-    # 設定展開ロジックを持つ公式スクリプト経由の起動に安全に戻す
+    network_mode: "service:mongo" # ネットワークをmongoと合体！
     command: /bin/bash /startup/delayrestapi.sh /userconfig
     restart: always
-    networks:
-      - dokploy-network
 
 networks:
   dokploy-network:

@@ -19,13 +19,16 @@ services:
     networks:
       - dokploy-network
 
-  # 2. データベース本体
+  # 2. データベース本体（全てのネットワークと外部公開ポートの親玉になります）
   db:
     image: mongo:7.0.23
-    hostname: db  # 👈 独立ネットワーク内で、自分が「db」であることをMongoDBに自覚させます
+    hostname: db
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongodb_data:/data/db
+    ports:
+      - "3000:3000"  # REST API 用のポートをここで一括公開
+      - "7900:7900"  # Node 用のポートをここで一括公開
     restart: always
     networks:
       - dokploy-network
@@ -42,19 +45,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - dokploy-network
+    volumes:
+      - symbol_startup:/startup:ro
+    network_mode: "service:db"
     command:
       - /bin/bash
       - -c
       - |
         echo "Waiting for db connection..."
-        until mongosh --host db --eval "db.runCommand({ping:1})" --quiet; do
+        until mongosh --eval "db.runCommand({ping:1})" --quiet; do
           sleep 1
         done
         
         echo "Initializing replica set..."
-        mongosh --host db --eval "
+        mongosh --eval "
           try {
             rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'db:27017' }] });
           } catch (e) {
@@ -63,7 +67,7 @@ services:
         " --quiet || true
 
         echo "Waiting for MongoDB to elect a PRIMARY node..."
-        until mongosh --host db --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
+        until mongosh --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
           sleep 1
         done
         echo "MongoDB is now PRIMARY and ready for writes!"
@@ -84,9 +88,9 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_broker:/data
-    networks:
-      - dokploy-network
-    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
+    network_mode: "service:db"
+    # 👇 起動直前に自分自身のhostsに db を登録するトリックを仕込みます
+    command: /bin/bash -c "echo '127.0.0.1 db' >> /etc/hosts && umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
 
@@ -105,11 +109,9 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_node:/data
-    ports:
-      - "7900:7900"  # 本体のポートは通常通りここで公開
-    networks:
-      - dokploy-network
-    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
+    network_mode: "service:db"
+    # 👇 起動直前に自分自身のhostsに db を登録するトリックを仕込みます
+    command: /bin/bash -c "echo '127.0.0.1 db' >> /etc/hosts && umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
 
@@ -125,10 +127,7 @@ services:
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
-    ports:
-      - "3000:3000"  # REST APIのポートは通常通りここで公開
-    networks:
-      - dokploy-network
+    network_mode: "service:db"
     command: /bin/bash /startup/delayrestapi.sh /userconfig
     restart: always
 

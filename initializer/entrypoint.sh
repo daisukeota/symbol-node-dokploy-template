@@ -61,8 +61,8 @@ try:
         try:
             return await orig_dispatch(self, action, url_path, *args, **kwargs)
         except Exception as e:
-            sys.stderr.write(f'\n[Patch] Connection to {self.endpoint} dropped ({e}). Forcing robust fallback node...\n')
-            self.endpoint = 'http://xym.allnodes.me:7900'
+            sys.stderr.write(f'\n[Patch] Connection to {self.endpoint} dropped ({e}). Forcing robust fallback REST node...\n')
+            self.endpoint = 'http://xym.allnodes.me:3000' # 👈 3000番ポート（REST API）に修正しました！
             return await orig_dispatch(self, action, url_path, *args, **kwargs)
     BasicConnector._dispatch = smart_dispatch
 except Exception as pe:

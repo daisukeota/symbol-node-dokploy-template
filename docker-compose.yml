@@ -19,7 +19,7 @@ services:
     networks:
       - dokploy-network
 
-# 2. データベース本体（P2Pネットワークの起点）
+# 2. データベース本体（全てのネットワーク空間の親玉）
   db:
     image: mongo:7.0.23
     hostname: db
@@ -27,14 +27,11 @@ services:
     volumes:
       - mongodb_data:/data/db
     ports:
-      - "7900:7900"  # P2P Node (node) 用のポート
+      - "3000:3000"  # 👈 REST API 用のポートをここで一括受付！
+      - "7900:7900"  # 👈 P2P Node 用のポートをここで一括受付！
     restart: always
     networks:
-      dokploy-network:
-        aliases:
-          - db
-          - client
-          - broker  # 👈 【重要】名前解決の引き受け先としてエイリアスを追加
+      - dokploy-network
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.runCommand({ping:1})", "--quiet"]
       interval: 3s
@@ -131,12 +128,9 @@ services:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
       - symbol_certificates:/certificates:ro
-    ports:
-      - "3000:3000"  # 👈 REST APIポートをこのコンテナ自身でネイティブに開放！
-    networks:
-      - dokploy-network  # 👈 Dokployの仕様に100%準拠
-    # 👇 db側のDNSエイリアスのおかげで、/etc/hostsの書き換えハックが不要になり綺麗に起動します！
-    command: npm start --prefix /app /userconfig/rest.json
+    network_mode: "service:db"  # 👈 ネットワーク空間をdbと完全共有（localhost化）
+    # ⚠️ networks: ブロックは絶対に書かないでください（排他エラーを完全に防止します）
+    command: /bin/bash -c "echo '127.0.0.1 db client broker' >> /etc/hosts && exec npm start --prefix /app /userconfig/rest.json"
     restart: always
 
 networks:

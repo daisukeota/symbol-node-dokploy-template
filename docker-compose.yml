@@ -127,8 +127,8 @@ services:
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
+      - symbol_certificates:/certificates:ro # 👈 【超重要】これをつなぎ込みます！
     network_mode: "service:db"
-    # 👇 スクリプトをバイパスして直接メインプログラムを起動します！
     command: npm start --prefix /app /userconfig/rest.json
     restart: always
 

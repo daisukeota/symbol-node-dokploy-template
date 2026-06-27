@@ -115,7 +115,7 @@ services:
     restart: always
     stop_signal: SIGINT
 
-  # 6. REST ゲートウェイ（API）
+# 6. REST ゲートウェイ（API）
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
@@ -128,7 +128,8 @@ services:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
     network_mode: "service:db"
-    command: /bin/bash /startup/delayrestapi.sh /userconfig
+    # 👇 スクリプトをバイパスして直接メインプログラムを起動します！
+    command: npm start --prefix /app /userconfig/rest.json
     restart: always
 
 networks:

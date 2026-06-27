@@ -95,7 +95,7 @@ services:
       - symbol_userconfig:/userconfig:ro
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
-      - symbol_data_broker:/data
+      - symbol_data_node:/data
     network_mode: "service:db"
     command: /bin/bash -c "echo '127.0.0.1 db' >> /etc/hosts && umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always

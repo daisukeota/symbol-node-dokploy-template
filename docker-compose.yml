@@ -20,16 +20,19 @@ services:
     networks:
       - dokploy-network
 
-  # 2. データベース本体
+  # 2. データベース本体 (兼 全コンテナのネットワーク親玉)
   db:
     image: mongo:7.0.23
     hostname: db
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongodb_data:/data/db
+    ports:
+      - "3000:3000"  # Dokployのドメイン(Traefik)からのAPIアクセスをここで受付
+      - "7900:7900"  # 外部ノード（Peer）からのP2P通信をここで受付
     restart: always
     networks:
-      - dokploy-network
+      - dokploy-network  # ドメインがここに紐付くため、Dokployの自動注入と100%調和します
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.runCommand({ping:1})", "--quiet"]
       interval: 3s
@@ -43,25 +46,24 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    networks:
-      - dokploy-network
+    network_mode: "service:db"
     command:
       - /bin/bash
       - -c
       - |
         echo "Waiting for db connection..."
-        until mongosh --host db --eval "db.runCommand({ping:1})" --quiet; do
+        until mongosh --eval "db.runCommand({ping:1})" --quiet; do
           sleep 1
         done
         echo "Initializing replica set..."
-        mongosh --host db --eval "
+        mongosh --eval "
           try {
             rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'db:27017' }] });
           } catch (e) {
             print('Already initialized: ' + e.message);
           }
         " --quiet || true
-        until mongosh --host db --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
+        until mongosh --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
           sleep 1
         done
         exit 0
@@ -81,9 +83,8 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_broker:/data
-    networks:
-      - dokploy-network
-    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
+    network_mode: "service:db"
+    command: /bin/bash -c "echo '127.0.0.1 db' >> /etc/hosts && umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
 
@@ -102,18 +103,12 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_node:/data
-    ports:
-      - "7900:7900"
-    networks:
-      dokploy-network:
-        aliases:
-          - client
-          - ${DOMAIN_NAME} # 👈 【超重要】APIサーバーがドメイン名で名前解決できるようにエイリアスを追加！
-    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
+    network_mode: "service:db"
+    command: /bin/bash -c "echo '127.0.0.1 db' >> /etc/hosts && umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
 
-  # 6. REST ゲートウェイ (API 外部公開用)
+  # 6. REST ゲートウェイ (API公開エンジン)
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
@@ -126,11 +121,9 @@ services:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
       - symbol_certificates:/certificates:ro
-    ports:
-      - "3000:3000"
-    networks:
-      - dokploy-network
-    command: npm start --prefix /app /userconfig/rest.json
+    network_mode: "service:db"
+    # 👇 本名であるドメイン名宛ての通信も、127.0.0.1（自分自身）に吸い込ませてSNIを完全一致させます
+    command: /bin/bash -c "echo \"127.0.0.1 db client broker ${DOMAIN_NAME}\" >> /etc/hosts && exec npm start --prefix /app /userconfig/rest.json"
     restart: always
 
 networks:

@@ -14,10 +14,16 @@ mkdir -p /app/target
 echo "Step 1: Extracting official shoestring.ini template..."
 python3 -m shoestring init --package ${SYMBOL_NETWORK:-mainnet} /app/shoestring.ini
 
-echo "Step 2: Injecting configuration lines directly under [node] section..."
-sed -i "/^\[node\]/a domain = ${DOMAIN_NAME}\nname = ${NODE_NAME:-MyDokployNode}" /app/shoestring.ini
+echo "Step 2: Injecting certification config and preparing overrides.ini..."
 sed -i "s|^caCommonName =.*|caCommonName = CA - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
 sed -i "s|^nodeCommonName =.*|nodeCommonName = Node - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
+
+# 👇 【ここが重要】friendlyName と host をCatapultのプロパティに確実に届けるため、overrides.ini を動的生成します
+cat << EOF > /app/overrides.ini
+[node.localnode]
+host = ${DOMAIN_NAME}
+friendlyName = ${NODE_NAME:-MyDokployNode}
+EOF
 
 echo "Step 3: Preparing temporary CA Private Key PEM file from HEX string..."
 python3 -c "
@@ -52,7 +58,8 @@ asyncio.run(main(sys.argv[1:]))
   --config /app/shoestring.ini \
   --ca-key-path /app/ca.key.pem \
   --directory /app/target \
-  --package ${SYMBOL_NETWORK:-mainnet}
+  --package ${SYMBOL_NETWORK:-mainnet} \
+  --overrides /app/overrides.ini # 👈 【ここが重要】生成したoverridesファイルを引数に追加します
 
 echo "Step 5: Distributing generated files to target volumes with full permissions..."
 rm -rf /app/dest_startup/* /app/dest_userconfig/* /app/dest_mongo/* /app/dest_seed/* /app/dest_certificates/* 2>/dev/null || true
@@ -78,6 +85,6 @@ else
 fi
 
 chmod -R 777 /app/dest_startup /app/dest_userconfig /app/dest_mongo /app/dest_seed /app/dest_certificates || true
-rm -f /app/ca.key.pem /app/shoestring.ini
+rm -f /app/ca.key.pem /app/shoestring.ini /app/overrides.ini # 🗑️ 一時ファイルのクリーンアップ
 
 echo "=== Initialization successfully completed! ==="

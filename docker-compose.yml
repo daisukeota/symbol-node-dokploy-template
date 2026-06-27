@@ -19,9 +19,10 @@ services:
     networks:
       - dokploy-network
 
-  # 2. データベース本体（サービス名を db に変更して設定と一致させます）
+  # 2. データベース本体
   db:
     image: mongo:7.0.23
+    hostname: db # 👈 【超重要】これでお互いの名前の不一致を完璧に解消します！
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongodb_data:/data/db
@@ -34,7 +35,7 @@ services:
       timeout: 3s
       retries: 5
 
-# 3. MongoDB レプリカセット初期化タスク
+  # 3. MongoDB レプリカセット初期化タスク
   mongo-init:
     image: mongo:7.0.23
     user: root
@@ -63,7 +64,6 @@ services:
           }
         " --quiet || true
 
-        # 👇 ここを追加：PRIMARY に昇格するまで安全に待機します
         echo "Waiting for MongoDB to elect a PRIMARY node..."
         until mongosh --host db --eval "db.hello().isWritablePrimary" --quiet | grep -q "true"; do
           sleep 1

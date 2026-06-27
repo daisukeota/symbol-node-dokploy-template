@@ -18,7 +18,6 @@ echo "Step 2: Injecting certification config and preparing overrides.ini..."
 sed -i "s|^caCommonName =.*|caCommonName = CA - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
 sed -i "s|^nodeCommonName =.*|nodeCommonName = Node - ${NODE_NAME:-MyDokployNode}|" /app/shoestring.ini
 
-# 👇 【ここが重要】friendlyName と host をCatapultのプロパティに確実に届けるため、overrides.ini を動的生成します
 cat << EOF > /app/overrides.ini
 [node.localnode]
 host = ${DOMAIN_NAME}
@@ -42,9 +41,10 @@ with open('/app/ca.key.pem', 'w') as f:
 "
 chmod 600 /app/ca.key.pem
 
-echo "Step 4: Running shoestring setup with Socket-Level Patch..."
+echo "Step 4: Running shoestring setup with Socket & Connection Resilient Patch..."
 python3 -c "
 import sys, asyncio, socket
+# [DNS Patch] 名前解決エラー時のループ防止
 orig_getaddrinfo = socket.getaddrinfo
 def smart_getaddrinfo(host, port, *args, **kwargs):
     try:
@@ -52,6 +52,22 @@ def smart_getaddrinfo(host, port, *args, **kwargs):
     except socket.gaierror:
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', port or 0))]
 socket.getaddrinfo = smart_getaddrinfo
+
+# [Connection Drop Patch] リモート切断時の一発クラッシュを防止する防護壁
+try:
+    from symbollightapi.connector.BasicConnector import BasicConnector
+    orig_dispatch = BasicConnector._dispatch
+    async def smart_dispatch(self, action, url_path, *args, **kwargs):
+        try:
+            return await orig_dispatch(self, action, url_path, *args, **kwargs)
+        except Exception as e:
+            sys.stderr.write(f'\n[Patch] Connection to {self.endpoint} dropped ({e}). Forcing robust fallback node...\n')
+            self.endpoint = 'http://xym.allnodes.me:7900'
+            return await orig_dispatch(self, action, url_path, *args, **kwargs)
+    BasicConnector._dispatch = smart_dispatch
+except Exception as pe:
+    sys.stderr.write(f'Patch error: {pe}\n')
+
 from shoestring.__main__ import main
 asyncio.run(main(sys.argv[1:]))
 " setup \
@@ -59,7 +75,7 @@ asyncio.run(main(sys.argv[1:]))
   --ca-key-path /app/ca.key.pem \
   --directory /app/target \
   --package ${SYMBOL_NETWORK:-mainnet} \
-  --overrides /app/overrides.ini # 👈 【ここが重要】生成したoverridesファイルを引数に追加します
+  --overrides /app/overrides.ini
 
 echo "Step 5: Distributing generated files to target volumes with full permissions..."
 rm -rf /app/dest_startup/* /app/dest_userconfig/* /app/dest_mongo/* /app/dest_seed/* /app/dest_certificates/* 2>/dev/null || true
@@ -69,7 +85,6 @@ cp -a /app/target/userconfig/. /app/dest_userconfig/
 cp -a /app/target/mongo/. /app/dest_mongo/
 cp -a /app/target/seed/. /app/dest_seed/
 
-# Shoestringの証明書格納場所を自動探索して確実に配送する安全装置
 if [ -d "/app/target/userconfig/resources/cert" ]; then
     cp -a /app/target/userconfig/resources/cert/. /app/dest_certificates/
 elif [ -d "/app/target/certificates" ]; then
@@ -85,6 +100,6 @@ else
 fi
 
 chmod -R 777 /app/dest_startup /app/dest_userconfig /app/dest_mongo /app/dest_seed /app/dest_certificates || true
-rm -f /app/ca.key.pem /app/shoestring.ini /app/overrides.ini # 🗑️ 一時ファイルのクリーンアップ
+rm -f /app/ca.key.pem /app/shoestring.ini /app/overrides.ini
 
 echo "=== Initialization successfully completed! ==="

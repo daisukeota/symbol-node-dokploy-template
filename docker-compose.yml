@@ -19,16 +19,12 @@ services:
     networks:
       - dokploy-network
 
-  # 2. データベース本体（ネットワークの親になります）
-  mongo:
+  # 2. データベース本体（サービス名を db に変更して設定と一致させます）
+  db:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
     volumes:
       - mongodb_data:/data/db
-    # ポートの公開をすべてこの親コンテナに集約します！
-    ports:
-      - "7900:7900"  # node用
-      - "3000:3000"  # rest-gateway用
     restart: always
     networks:
       - dokploy-network
@@ -43,20 +39,21 @@ services:
     image: mongo:7.0.23
     user: root
     depends_on:
-      mongo:
+      db:
         condition: service_healthy
     volumes:
       - symbol_startup:/startup:ro
-    network_mode: "service:mongo"
+    networks:
+      - dokploy-network
     command:
       - /bin/bash
       - -ec
       - |
-        mongosh --eval "
+        mongosh --host db --eval "
           try {
             rs.status();
           } catch (e) {
-            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] });
+            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'db:27017' }] });
           }
         " --quiet
 
@@ -75,7 +72,8 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_broker:/data
-    network_mode: "service:mongo" # ネットワークをmongoと合体！
+    networks:
+      - dokploy-network
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
@@ -95,7 +93,10 @@ services:
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_node:/data
-    network_mode: "service:mongo" # ネットワークをmongoと合体！
+    ports:
+      - "7900:7900"
+    networks:
+      - dokploy-network
     command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
@@ -112,7 +113,10 @@ services:
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
-    network_mode: "service:mongo" # ネットワークをmongoと合体！
+    ports:
+      - "3000:3000"
+    networks:
+      - dokploy-network
     command: /bin/bash /startup/delayrestapi.sh /userconfig
     restart: always
 

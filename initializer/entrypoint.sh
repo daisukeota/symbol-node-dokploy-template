@@ -27,7 +27,7 @@ EOF
 if [ -n "$BENEFICIARY_ADDRESS" ]; then
     cat << EOF >> /app/overrides.ini
 
-[harvesting]
+[harvesting.harvesting]
 beneficiaryAddress = ${BENEFICIARY_ADDRESS}
 EOF
 fi

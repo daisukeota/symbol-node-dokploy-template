@@ -1,5 +1,5 @@
 services:
-  # 1. 初期化コンテナ (Shoestringによる設定ファイル自動生成)
+  # 1. 初期化タスク（Shoestringによる鍵・設定ファイル生成）
   initializer:
     build: ./initializer
     volumes:
@@ -19,7 +19,7 @@ services:
     networks:
       - dokploy-network
 
-  # 2. データベース (MongoDB 本体)
+  # 2. データベース本体
   mongo:
     image: mongo:7.0.23
     command: mongod --replSet rs0 --bind_ip_all
@@ -28,98 +28,94 @@ services:
     restart: always
     networks:
       - dokploy-network
+    # mongo単体での生存確認ヘルスチェックを定義
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping:1})", "--quiet"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
 
   # 3. MongoDB レプリカセット初期化タスク
-  # ※ MongoDB本体が完全にオンラインになるのを待ってから、安全にレプリカセット(rs0)を構成します
   mongo-init:
     image: mongo:7.0.23
     user: root
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy # mongoがReadyになるまで絶対に動かない
     volumes:
       - symbol_startup:/startup:ro
-    network_mode: "service:mongo" # mongo本体のネットワークに相乗りして直接コマンドを注入
+    network_mode: "service:mongo"
     command:
       - /bin/bash
       - -ec
       - |
-        echo "=== MongoDB ReplicaSet Initialization Task ==="
-        until mongosh --eval "db.runCommand({ping:1})" --quiet > /dev/null 2>&1; do
-          echo "Waiting for MongoDB to be fully ready..."
-          sleep 2
-        done
         mongosh --eval "
           try {
-            var status = rs.status();
-            print('ReplicaSet already initiated: ' + status.set);
+            rs.status();
           } catch (e) {
-            print('Initiating ReplicaSet with host: mongo...');
-            var res = rs.initiate({
-              _id: 'rs0',
-              members: [{ _id: 0, host: 'mongo:27017' }]
-            });
-            print('Result: ' + JSON.stringify(res));
+            rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] });
           }
         " --quiet
-        sleep 2
-        mongosh --eval "rs.status()" --quiet || echo "Warning: Failed to get rs.status()"
 
-  # 4. Symbol Broker（承認エンジン）
+  # 4. Symbol Broker
   broker:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
     depends_on:
-      - initializer
-      - mongo
+      initializer:
+        condition: service_completed_successfully # initializerが「正常終了」するまで絶対にマウントさせない
+      mongo-init:
+        condition: service_completed_successfully # DB初期化が終わるまで待つ
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
       - symbol_data_broker:/data
-    # 💡 処理の解説:
-    # 1. umask 077: 公式推奨の堅牢なファイル権限に制限
-    # 2. mkdir & touch: 公式スクリプトが初回起動時に存在しないファイルを rm しようとしてクラッシュするバグを先回りで防止
-    # 3. rm -f *.lock: 異常終了時に残って再起動を阻害する古いロックファイルを自動パージ
-    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/datadir-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
+    command: /bin/bash -c "rm -f /data/*.lock && exec /bin/bash /startup/startBroker.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
       - dokploy-network
 
-  # 5. Symbol ノード本体 (Peerサーバー)
+  # 5. Symbol ノード本体 (Peer)
   node:
     image: symbolplatform/symbol-server:gcc-1.0.3.9
     user: root
     depends_on:
-      - initializer
-      - broker
+      initializer:
+        condition: service_completed_successfully # 同上
+      broker:
+        condition: service_started
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
       - symbol_seed:/seed:ro
       - symbol_certificates:/certificates:ro
-      - symbol_data_node:/data # ※ ロック競合を防ぐため、brokerとは完全に独立した個別ボリュームを割り当て
+      - symbol_data_node:/data
     ports:
       - "7900:7900"
-    command: /bin/bash -c "umask 077 && mkdir -p /data/startup && touch /data/startup/mongo-initialized && rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
+    command: /bin/bash -c "rm -f /data/*.lock && exec /bin/bash /startup/startServer.sh /userconfig"
     restart: always
     stop_signal: SIGINT
     networks:
       - dokploy-network
 
-  # 6. REST ゲートウェイ (API 外部公開用)
+  # 6. REST ゲートウェイ（API）
   rest-gateway:
     image: symbolplatform/symbol-rest:2.5.1
     user: root
     depends_on:
-      - node
-      - mongo
+      initializer:
+        condition: service_completed_successfully # これによりrest.jsonがフォルダになるバグを100%防ぐ
+      node:
+        condition: service_started
     volumes:
       - symbol_startup:/startup:ro
       - symbol_userconfig:/userconfig:ro
     ports:
       - "3000:3000"
+    # 先ほど特定した正しいパスと、実行ディレクトリの移動を美しく内包
     command: /bin/bash -c "cd /app/src && node index.js"
     restart: always
     networks:

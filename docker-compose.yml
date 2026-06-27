@@ -17,6 +17,7 @@ services:
       - VRF_PRIVATE_KEY=${VRF_PRIVATE_KEY}
       - REMOTE_PRIVATE_KEY=${REMOTE_PRIVATE_KEY}
       - VOTING_PRIVATE_KEY=${VOTING_PRIVATE_KEY}
+      - BENEFICIARY_ADDRESS=${BENEFICIARY_ADDRESS}
     networks:
       - dokploy-network
 

@@ -120,7 +120,7 @@ services:
       - symbol_userconfig:/userconfig:ro
     ports:
       - "3000:3000"
-    command: /bin/bash /startup/delayrestapi.sh /userconfig
+    command: /usr/bin/node /rest/index.js
     restart: always
     networks:
       - dokploy-network
